@@ -67,3 +67,4 @@
 * **Consequences**:
   - *Positive*: Predictable latency ceilings, controlled inference costs, production reliability, zero hallucination on out-of-scope questions.
   - *Trade-off*: Complex edge cases may refuse rather than try a 3rd or 4th attempt.
+

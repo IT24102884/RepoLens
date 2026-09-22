@@ -124,3 +124,4 @@ Every benchmark query that produces an incorrect, ungrounded, or failed response
 - **After Metric**: Recall@5 = 83.3%
 - **Status**: RESOLVED (Regression test added)
 ```
+

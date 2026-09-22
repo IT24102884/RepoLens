@@ -1,11 +1,11 @@
-# Engineering Knowledge Copilot
+# RepoLens
 
-> A self-correcting, multi-agent RAG system that answers difficult multi-hop engineering questions across source code, documentation, and engineering tickets by routing queries to the right sources, verifying retrieved evidence, reformulating failed searches, and measuring system quality with a reproducible evaluation pipeline.
+> **RepoLens**: A self-correcting, multi-agent knowledge & citation engine that answers complex multi-hop engineering questions across source code, documentation, and tickets. Built with AST-level code tracing, hybrid retrieval, and deterministic citation verification.
 
 ---
 
 ## 1. Project Overview
-Engineering Knowledge Copilot is an enterprise-grade AI system designed to solve the fragmented knowledge problem in software organizations. Instead of generating unverified answers from raw LLM memory, it acts as a deterministic verification gate across:
+**RepoLens** is an enterprise-grade AI system designed to solve the fragmented knowledge problem in software organizations. Instead of generating unverified answers from raw LLM memory, it acts as a deterministic verification gate across:
 - **Source Code**: AST-aware semantic parsing with parent class context and exact line bounds.
 - **Documentation**: Hierarchical markdown sections with heading breadcrumbs.
 - **Engineering Tickets**: Issue tracking data with comments, linked commits, and status history.
@@ -104,3 +104,4 @@ engineering-knowledge-copilot/
 | **System C (+ Router)** | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* |
 | **System D (+ Critic)** | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* |
 | **System E (+ Bounded Retry)**| *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* |
+

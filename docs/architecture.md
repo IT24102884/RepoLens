@@ -149,3 +149,4 @@ The system includes a **Deterministic Citation Validator** that runs before show
 To prevent infinite loops, unpredictable costs, and latency spikes:
 - `MAX_RETRIES = 2` hardcoded limit.
 - If Critic fails on retry #2, the system does not loop again; it transitions to the `GracefulRefusal` node, returning the partial evidence found, what specifically could not be verified, and why it refused to speculate.
+

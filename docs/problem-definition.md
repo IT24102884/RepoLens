@@ -62,3 +62,4 @@ requires manual multi-hop navigation across code, markdown, and tickets. Standar
 4. **Retrieval Recall**: Top-K retrieval recall $\ge 85\%$ across complex multi-hop queries using hybrid search.
 5. **Bounded Latency & Cost**: Bounded retry loop (`MAX_RETRIES = 2`) with an end-to-end p95 query latency budget $\le 12\text{s}$ (local/fast model).
 6. **Measurable Ablation**: Documented before-and-after empirical impact of each architectural stage (Basic RAG $\rightarrow$ Hybrid $\rightarrow$ Router $\rightarrow$ Critic $\rightarrow$ Retry).
+

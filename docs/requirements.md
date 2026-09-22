@@ -73,3 +73,4 @@
 
 ### NFR-6: Modularity & Vendor Independence
 * Storage backends (Vector DB, BM25) and LLM providers must be abstracted behind Python Protocols (`abc.ABC`), enabling seamless swapping between OpenAI, Gemini, Anthropic, or local Ollama instances.
+
