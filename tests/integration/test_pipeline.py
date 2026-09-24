@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
-from src.core.models import DocumentType
-from src.ingestion.pipeline import IngestionPipeline
+from ai.core.models import DocumentType
+from ai.ingestion.pipeline import IngestionPipeline
 
 
 def test_ingestion_pipeline_end_to_end(tmp_path: Path):

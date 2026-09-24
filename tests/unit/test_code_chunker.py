@@ -1,5 +1,5 @@
-from src.core.models import DocumentType
-from src.ingestion.code_chunker import ASTCodeChunker
+from ai.core.models import DocumentType
+from ai.ingestion.code_chunker import ASTCodeChunker
 
 SAMPLE_PYTHON_CODE = '''"""This is a sample module for testing."""
 

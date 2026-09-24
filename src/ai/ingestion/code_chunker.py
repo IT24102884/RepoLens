@@ -1,7 +1,7 @@
 import ast
 from typing import Any, Dict, List, Optional
-from src.core.models import DocumentChunk, DocumentType
-from src.ingestion.base import BaseChunker
+from ai.core.models import DocumentChunk, DocumentType
+from ai.ingestion.base import BaseChunker
 
 
 class ASTCodeChunker(BaseChunker):

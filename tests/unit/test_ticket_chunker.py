@@ -1,6 +1,6 @@
 import json
-from src.core.models import DocumentType
-from src.ingestion.ticket_chunker import TicketChunker
+from ai.core.models import DocumentType
+from ai.ingestion.ticket_chunker import TicketChunker
 
 
 def test_ticket_chunker_parses_issue_and_comments():

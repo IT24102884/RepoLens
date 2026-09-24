@@ -97,11 +97,11 @@ engineering-knowledge-copilot/
 
 ## 6. Baseline vs. Ablation Progress
 
-| System Variant | Recall@5 | Precision@5 | Faithfulness | Citation Validity | Routing Acc. | P95 Latency | Est. Cost / 1k |
+| System Variant | Recall@5 | Keyword Cov. | Faithfulness | Citation Rate | Refusal Acc. | Avg Latency | Cost / 1k |
 |---|---|---|---|---|---|---|---|
-| **System A (Naive RAG)** | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | N/A | *Not measured yet* | *Not measured yet* |
-| **System B (Hybrid Search)** | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | N/A | *Not measured yet* | *Not measured yet* |
-| **System C (+ Router)** | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* |
-| **System D (+ Critic)** | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* |
-| **System E (+ Bounded Retry)**| *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* | *Not measured yet* |
+| **System A (Naive Dense RAG)** | **62.5%** | **72.9%** | **68.8%** | **100.0%** | **75.0%** | **5.29s** | **$0.00** |
+| **System B (BM25 Hybrid + RRF)** | *Ablation 2* | *Ablation 2* | *Ablation 2* | *Ablation 2* | *Ablation 2* | *Ablation 2* | *Ablation 2* |
+| **System C (+ Multi-Source Router)** | *Ablation 3* | *Ablation 3* | *Ablation 3* | *Ablation 3* | *Ablation 3* | *Ablation 3* | *Ablation 3* |
+| **System D (+ Critic & Hallucination Guard)** | *Ablation 4* | *Ablation 4* | *Ablation 4* | *Ablation 4* | *Ablation 4* | *Ablation 4* | *Ablation 4* |
+| **System E (+ Bounded Retry Loop)** | *Ablation 5* | *Ablation 5* | *Ablation 5* | *Ablation 5* | *Ablation 5* | *Ablation 5* | *Ablation 5* |
 

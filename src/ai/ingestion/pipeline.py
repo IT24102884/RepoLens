@@ -2,10 +2,10 @@ import json
 import os
 from pathlib import Path
 from typing import Dict, List, Optional
-from src.core.models import DocumentChunk, DocumentType
-from src.ingestion.code_chunker import ASTCodeChunker
-from src.ingestion.doc_chunker import MarkdownDocChunker
-from src.ingestion.ticket_chunker import TicketChunker
+from ai.core.models import DocumentChunk, DocumentType
+from ai.ingestion.code_chunker import ASTCodeChunker
+from ai.ingestion.doc_chunker import MarkdownDocChunker
+from ai.ingestion.ticket_chunker import TicketChunker
 
 # Ignored directory names during scanning
 IGNORED_DIRS = {".git", ".venv", "__pycache__", ".pytest_cache", "build", "dist", "node_modules"}
@@ -79,3 +79,34 @@ class IngestionPipeline:
             "ticket_chunks": sum(1 for c in chunks if c.source_type == DocumentType.ISSUE_PR),
         }
         return summary
+    
+
+def main():
+    raw_dir = Path("data/raw")
+    output_path = Path("data/processed/chunks.jsonl")
+
+    if not raw_dir.exists():
+        print("data/raw directory not found.")
+        return
+
+    print(f"Starting ingestion of {raw_dir}...")
+    pipeline = IngestionPipeline()
+    chunks = pipeline.process_directory(raw_dir)
+
+    print(f"Saving {len(chunks)} chunks to {output_path}...")
+    pipeline.save_chunks(chunks, output_path)
+
+    summary = pipeline.get_summary(chunks)
+
+    print("\n" + "=" * 50)
+    print("         INGESTION SUMMARY REPORT")
+    print("=" * 50)
+    print(f"  Total Chunks:       {summary['total_chunks']}")
+    print(f"  - Code Chunks:      {summary['code_chunks']}")
+    print(f"  - Doc Chunks:       {summary['doc_chunks']}")
+    print(f"  - Ticket Chunks:    {summary['ticket_chunks']}")
+    print("=" * 50)
+    print(f"[+] Successfully generated {output_path}!\n")
+
+if __name__ == "__main__":
+    main()

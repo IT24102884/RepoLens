@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List
-from src.core.models import DocumentChunk
+from ai.core.models import DocumentChunk
 
 
 class BaseChunker(ABC):

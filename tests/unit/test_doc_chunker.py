@@ -1,5 +1,5 @@
-from src.core.models import DocumentType
-from src.ingestion.doc_chunker import MarkdownDocChunker
+from ai.core.models import DocumentType
+from ai.ingestion.doc_chunker import MarkdownDocChunker
 
 
 def test_markdown_headers():

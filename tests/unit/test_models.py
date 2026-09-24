@@ -1,6 +1,6 @@
 import pytest
 from pydantic import ValidationError
-from src.core.models import DocumentChunk, DocumentType
+from ai.core.models import DocumentChunk, DocumentType
 
 
 def test_document_chunk_deterministic_id():

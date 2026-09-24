@@ -1,4 +1,4 @@
-from src.ingestion.code_chunker import ASTCodeChunker
+from ai.ingestion.code_chunker import ASTCodeChunker
 
 # 1. Sample Python Code to Chunk
 SAMPLE_CODE = '''"""Client module for HTTP requests."""

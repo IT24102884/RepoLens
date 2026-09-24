@@ -5,10 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "repolens"
 version = "0.1.0"
-description = "RepoLens: A self-correcting, multi-agent knowledge & citation engine for engineering codebases, documentation, and tickets."
+description = "RepoLens: A self-correcting, multi-agent knowledge and citation engine for engineering codebases, documentation, and tickets."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
 dependencies = [
     "pydantic>=2.7.0",
     "fastapi>=0.111.0",
@@ -19,6 +19,9 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "langgraph>=0.2.0",
     "langchain-core>=0.2.0",
+    "google-genai>=2.24.0",
+    "chromadb>=1.5.9",
+    "groq>=1.7.0",
 ]
 
 [dependency-groups]
@@ -35,5 +38,5 @@ target-version = "py312"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src"]
 asyncio_mode = "auto"

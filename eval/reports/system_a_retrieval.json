@@ -1,0 +1,91 @@
+{
+  "system": "System A (Dense Vector Retrieval via ChromaDB)",
+  "summary": {
+    "recall_at_5": 0.625,
+    "mrr": 0.5625,
+    "keyword_coverage": 0.7291666666666666,
+    "avg_latency_ms": 164.67220000049565
+  },
+  "results": [
+    {
+      "id": "Q-001",
+      "category": "SINGLE_HOP_DOCS",
+      "question": "What are the four different types of timeouts supported in HTTPX and what exceptions do they raise?",
+      "hit_at_1": "YES",
+      "recall_at_5": 1.0,
+      "reciprocal_rank": 1.0,
+      "keyword_coverage": 1.0,
+      "latency_ms": 252.12689998443238
+    },
+    {
+      "id": "Q-002",
+      "category": "SINGLE_HOP_CODE",
+      "question": "Where is the URL class defined and how does it parse raw byte paths?",
+      "hit_at_1": "YES",
+      "recall_at_5": 1.0,
+      "reciprocal_rank": 1.0,
+      "keyword_coverage": 0.5,
+      "latency_ms": 158.9901999977883
+    },
+    {
+      "id": "Q-003",
+      "category": "SINGLE_HOP_TICKETS",
+      "question": "Why does AsyncClient hang when calling client.stream without an async with context manager according to issue 1240?",
+      "hit_at_1": "NO",
+      "recall_at_5": 0.0,
+      "reciprocal_rank": 0.0,
+      "keyword_coverage": 1.0,
+      "latency_ms": 157.58500000811182
+    },
+    {
+      "id": "Q-004",
+      "category": "EXACT_TOKEN_CODE",
+      "question": "Which file and class defines the codes status HTTPStatus.TOO_MANY_REQUESTS handling?",
+      "hit_at_1": "NO",
+      "recall_at_5": 1.0,
+      "reciprocal_rank": 0.5,
+      "keyword_coverage": 0.3333333333333333,
+      "latency_ms": 149.54610000131652
+    },
+    {
+      "id": "Q-005",
+      "category": "OUT_OF_SCOPE",
+      "question": "How do I configure a GraphQL subscription with Apollo Federation in HTTPX?",
+      "hit_at_1": "YES",
+      "recall_at_5": 1.0,
+      "reciprocal_rank": 1.0,
+      "keyword_coverage": 1.0,
+      "latency_ms": 151.3076999981422
+    },
+    {
+      "id": "Q-006",
+      "category": "MULTI_HOP_CODE",
+      "question": "How does Client.request pass headers and cookies down to the underlying transport dispatch?",
+      "hit_at_1": "NO",
+      "recall_at_5": 0.0,
+      "reciprocal_rank": 0.0,
+      "keyword_coverage": 0.0,
+      "latency_ms": 147.96649999334477
+    },
+    {
+      "id": "Q-007",
+      "category": "SINGLE_HOP_DOCS",
+      "question": "How do I configure custom SSL certificates or disable SSL verification in an HTTPX client?",
+      "hit_at_1": "YES",
+      "recall_at_5": 1.0,
+      "reciprocal_rank": 1.0,
+      "keyword_coverage": 1.0,
+      "latency_ms": 151.0306000127457
+    },
+    {
+      "id": "Q-008",
+      "category": "SINGLE_HOP_TICKETS",
+      "question": "How was the HTTP/2 keepalive connection drop issue fixed in ticket 1405?",
+      "hit_at_1": "NO",
+      "recall_at_5": 0.0,
+      "reciprocal_rank": 0.0,
+      "keyword_coverage": 1.0,
+      "latency_ms": 148.8246000080835
+    }
+  ]
+}
