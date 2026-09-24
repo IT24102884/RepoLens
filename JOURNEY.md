@@ -137,7 +137,9 @@ Rather than accepting the baseline score as a finished product, we inspected eve
 - **Question**: *"How does Client.request pass headers and cookies down to the underlying transport dispatch?"*
 - **What happened**: **Recall@5 was 0.0%**. The retriever returned general transport overview docs and changelog entries.
 - **Root Cause**: Answering an architectural traversal question requires following a call path across multiple files:
-  $$\text{Client.request} \longrightarrow \text{Client.build\_request} \longrightarrow \text{Transport.handle\_request}$$
+  ```
+  Client.request()  ───>  Client.build_request()  ───>  Transport.handle_request()
+  ```
   A flat top-5 retrieval cannot bridge this multi-step relationship in a single pass.
 
 ---
