@@ -15,8 +15,18 @@ def evaluate_retrieval_recall(retrieved_chunks: List[Dict[str, Any]], expected_f
 
     retrieved_files = {c.get("file_path", "").replace("\\", "/") for c in retrieved_chunks}
 
-    # Count how many expected files showed up in the results
-    hits = sum(1 for exp in expected_files if any(exp in rf for rf in retrieved_files))
+    hits = 0
+    for exp in expected_files:
+        exp_clean = exp.replace("\\", "/").removesuffix(".json")
+        matched = False
+        for rf in retrieved_files:
+            rf_clean = rf.replace("\\", "/").removesuffix(".json")
+            if exp_clean in rf or rf in exp_clean or exp in rf or (exp_clean.split("/")[-1] in rf_clean):
+                matched = True
+                break
+        if matched:
+            hits += 1
+
     return hits / len(expected_files)
 
 

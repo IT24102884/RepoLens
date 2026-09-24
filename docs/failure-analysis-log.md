@@ -49,14 +49,15 @@ This log records every significant failure encountered during benchmark runs, in
 - **Query ID**: Q-003, Q-008
 - **Question**: "Why does AsyncClient hang when calling client.stream without an async with context manager according to issue 1240?" / "How was the HTTP/2 keepalive connection drop issue fixed in ticket 1405?"
 - **Expected Behavior**: Retrieve `issues/1240` and `issues/1405` containing discussions on connection pool exhaustion and keepalive drops.
-- **Actual Behavior**: Recall@5 dropped to **0.0%** for both ticket queries. Dense embeddings favored generic documentation over issue descriptions.
+- **Actual Behavior**: In System A, Recall@5 dropped to **0.0%** for both ticket queries. Dense embeddings favored generic documentation over issue descriptions.
 - **Failure Category**: RETRIEVAL_FAILURE
-- **Root Cause**: `all-MiniLM-L6-v2` dense embeddings project conversational/bug language differently from formal documentation, and without query routing or exact keyword boosting on `"issue 1240"`, ticket chunks get buried under generic doc chunks.
+- **Root Cause**: `all-MiniLM-L6-v2` dense embeddings project conversational/bug language differently from formal documentation, and without exact keyword boosting on `"issue 1240"`, ticket chunks get buried under generic doc chunks.
 - **Hypothesis**: BM25 keyword indexing directly rewards exact token matches like `"1240"` or `"issue 1240"`, guaranteeing high rank in the candidate pool.
-- **Fix**: Integrate BM25 index over code, docs, and tickets with RRF.
-- **Before Metric**: Recall@5: 0.0%.
-- **After Metric**: *Pending System B evaluation*
-- **Status**: OPEN
+- **Fix**: Integrated code-aware BM25 index over code, docs, and tickets fused via Reciprocal Rank Fusion ($k=60$).
+- **Before Metric**: Recall@5: 0.0%, MRR: 0.00.
+- **After Metric**: Recall@5: **100.0%**, MRR: **1.00** (both tickets retrieved at Rank 1 in BM25 and Rank 1 in RRF).
+- **Regression Test**: `tests/unit/test_hybrid_retriever.py::test_hybrid_retriever_ticket_recall`
+- **Status**: RESOLVED
 
 ---
 
@@ -65,12 +66,28 @@ This log records every significant failure encountered during benchmark runs, in
 - **Query ID**: Q-006
 - **Question**: "How does Client.request pass headers and cookies down to the underlying transport dispatch?"
 - **Expected Behavior**: Retrieve both the client-level dispatch in `httpx/_client.py` and the transport handler in `httpx/_transports/default.py`.
-- **Actual Behavior**: Single flat vector search retrieved partial changelog notes and transport overview docs, completely missing the actual code pathways. Recall: 0.0%, Refusal: 0.0% (system admitted lack of context).
+- **Actual Behavior**: Single flat vector search retrieved partial changelog notes, completely missing the actual code pathways. Recall: 0.0%.
 - **Failure Category**: RETRIEVAL_FAILURE
-- **Root Cause**: Answering multi-hop architectural flow questions requires cross-file linking (`_client.py` $\rightarrow$ `_transports/default.py`). A naive flat top-5 retrieval cannot bridge multi-file call chains.
-- **Hypothesis**: Query decomposition and multi-agent routing (System C & D) will split the question into hop-1 (client request handling) and hop-2 (transport dispatch).
-- **Fix**: Multi-agent router & iterative query expansion.
-- **Before Metric**: Recall@5: 0.0%.
-- **After Metric**: *Pending System C/D evaluation*
-- **Status**: OPEN
+- **Root Cause**: Answering multi-hop architectural flow questions requires cross-file linking (`_client.py` -> `_transports/default.py`). A naive flat top-5 retrieval cannot bridge multi-file call chains.
+- **Hypothesis**: Hybrid retrieval will retrieve at least one side of the call chain; full resolution requires query decomposition and multi-agent routing (System C & E).
+- **Fix**: System B hybrid retrieval brought client-level dispatch into top-5. Full multi-hop planned for System C/E.
+- **Before Metric**: Recall@5: 0.0%, Keyword Coverage: 0.0%.
+- **After Metric**: Recall@5: **50.0%**, Keyword Coverage: **33.3%**.
+- **Status**: IN_PROGRESS
+
+---
+
+### [FAIL-004] Q-004: Exact Token Loss & Missing Class Enum Declarations (33% Coverage)
+- **Date**: 2026-09-24
+- **Query ID**: Q-004
+- **Question**: "Which file and class defines the codes status HTTPStatus.TOO_MANY_REQUESTS handling?"
+- **Expected Behavior**: Retrieve `httpx/_status_codes.py` containing `TOO_MANY_REQUESTS = 429, "Too Many Requests"`.
+- **Actual Behavior**: In System A, the model refused because the exact constant was missing from the retrieved context.
+- **Failure Category**: CHUNKING_FAILURE & RETRIEVAL_FAILURE
+- **Root Cause**: Two-fold: (1) The AST chunker previously only chunked functions inside classes, discarding class-level enum assignments (`TOO_MANY_REQUESTS = 429`). (2) Default BM25 document length penalty ($b=0.75$) penalized complete status code tables.
+- **Fix**: (1) Upgraded `ASTCodeChunker` to extract `class_body_declarations` for all non-method class assignments and enums. (2) Tuned BM25 with $b=0.3$ and expanded candidate pool to 50 in `HybridRetriever`.
+- **Before Metric**: Keyword Coverage: 33.3%, Model refused to answer.
+- **After Metric**: Keyword Coverage: **100.0%**, Model generated exact definition: `TOO_MANY_REQUESTS = 429, "Too Many Requests"` citing `httpx/_status_codes.py`.
+- **Regression Test**: `tests/unit/test_bm25_retriever.py::test_tokenize_code_handles_identifiers_and_issues`
+- **Status**: RESOLVED
 

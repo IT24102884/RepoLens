@@ -1,10 +1,10 @@
 {
-  "system": "System A (Dense Vector Retrieval)",
+  "system": "System B (Hybrid BM25 + Dense RRF)",
   "summary": {
-    "recall_at_5": 0.875,
-    "mrr": 0.8125,
-    "keyword_coverage": 0.7291666666666666,
-    "avg_latency_ms": 164.66127499734284
+    "recall_at_5": 0.9375,
+    "mrr": 0.7541666666666667,
+    "keyword_coverage": 0.8541666666666666,
+    "avg_latency_ms": 177.89616249501705
   },
   "results": [
     {
@@ -15,17 +15,17 @@
       "recall_at_5": 1.0,
       "reciprocal_rank": 1.0,
       "keyword_coverage": 1.0,
-      "latency_ms": 277.68749999813735
+      "latency_ms": 333.43169995350763
     },
     {
       "id": "Q-002",
       "category": "SINGLE_HOP_CODE",
       "question": "Where is the URL class defined and how does it parse raw byte paths?",
-      "hit_at_1": "YES",
+      "hit_at_1": "NO",
       "recall_at_5": 1.0,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "keyword_coverage": 0.5,
-      "latency_ms": 139.81070002773777
+      "latency_ms": 160.87630001129583
     },
     {
       "id": "Q-003",
@@ -35,7 +35,7 @@
       "recall_at_5": 1.0,
       "reciprocal_rank": 1.0,
       "keyword_coverage": 1.0,
-      "latency_ms": 148.9720999961719
+      "latency_ms": 158.60070002963766
     },
     {
       "id": "Q-004",
@@ -43,9 +43,9 @@
       "question": "Which file and class defines the codes status HTTPStatus.TOO_MANY_REQUESTS handling?",
       "hit_at_1": "NO",
       "recall_at_5": 1.0,
-      "reciprocal_rank": 0.5,
-      "keyword_coverage": 0.3333333333333333,
-      "latency_ms": 149.3447999819182
+      "reciprocal_rank": 0.2,
+      "keyword_coverage": 1.0,
+      "latency_ms": 155.75360000366345
     },
     {
       "id": "Q-005",
@@ -55,17 +55,17 @@
       "recall_at_5": 1.0,
       "reciprocal_rank": 1.0,
       "keyword_coverage": 1.0,
-      "latency_ms": 144.80989996809512
+      "latency_ms": 154.78280000388622
     },
     {
       "id": "Q-006",
       "category": "MULTI_HOP_CODE",
       "question": "How does Client.request pass headers and cookies down to the underlying transport dispatch?",
       "hit_at_1": "NO",
-      "recall_at_5": 0.0,
-      "reciprocal_rank": 0.0,
-      "keyword_coverage": 0.0,
-      "latency_ms": 143.22169998195022
+      "recall_at_5": 0.5,
+      "reciprocal_rank": 0.3333333333333333,
+      "keyword_coverage": 0.3333333333333333,
+      "latency_ms": 155.86729999631643
     },
     {
       "id": "Q-007",
@@ -75,7 +75,7 @@
       "recall_at_5": 1.0,
       "reciprocal_rank": 1.0,
       "keyword_coverage": 1.0,
-      "latency_ms": 159.60379998432472
+      "latency_ms": 147.09439995931461
     },
     {
       "id": "Q-008",
@@ -85,7 +85,7 @@
       "recall_at_5": 1.0,
       "reciprocal_rank": 1.0,
       "keyword_coverage": 1.0,
-      "latency_ms": 153.83970004040748
+      "latency_ms": 156.76250000251457
     }
   ]
 }

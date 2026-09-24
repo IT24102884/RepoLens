@@ -88,13 +88,53 @@ class ASTCodeChunker(BaseChunker):
             )
         )
 
-        # Extract each method in the class as its own independent chunk
-        for item in class_node.body:
+        # Process class body: group non-function statements (attributes, enums, type definitions)
+        current_block: List[ast.stmt] = []
+
+        def flush_block(block: List[ast.stmt]) -> None:
+            if not block:
+                return
+            b_start = min(st.lineno for st in block)
+            b_end = max((st.end_lineno or st.lineno) for st in block)
+            b_lines = lines[b_start - 1 : b_end]
+            b_content = "\n".join(b_lines)
+            if b_content.strip():
+                chunks.append(
+                    DocumentChunk.create(
+                        source_type=DocumentType.CODE,
+                        file_path=file_path,
+                        start_line=b_start,
+                        end_line=b_end,
+                        content=b_content,
+                        metadata={
+                            "symbol_name": class_name,
+                            "symbol_type": "class_body_declarations",
+                            "parent_class": class_name,
+                        },
+                    )
+                )
+
+        # Identify if first body statement is the class docstring (already in class_header)
+        first_is_docstring = False
+        if class_node.body and isinstance(class_node.body[0], ast.Expr):
+            val = class_node.body[0].value
+            if (isinstance(val, ast.Constant) and isinstance(val.value, str)) or isinstance(val, ast.Str):
+                first_is_docstring = True
+
+        for i, item in enumerate(class_node.body):
+            if i == 0 and first_is_docstring:
+                continue
+
             if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                flush_block(current_block)
+                current_block = []
                 chunks.append(
                     self._process_function(item, lines, file_path, parent_class=class_name)
                 )
+            else:
+                current_block.append(item)
 
+        flush_block(current_block)
         return chunks
 
     def _process_function(

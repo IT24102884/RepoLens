@@ -1,0 +1,109 @@
+{
+  "system": "System B (Hybrid BM25 + Dense RRF)",
+  "summary": {
+    "recall": 0.9375,
+    "keyword_coverage": 0.8541666666666666,
+    "faithfulness": 0.4375,
+    "refusal_accuracy": 0.875,
+    "citation_presence": 1.0,
+    "avg_latency_sec": 6.2304149249976035
+  },
+  "details": [
+    {
+      "id": "Q-001",
+      "category": "SINGLE_HOP_DOCS",
+      "question": "What are the four different types of timeouts supported in HTTPX and what exceptions do they raise?",
+      "recall": 1.0,
+      "keyword_coverage": 1.0,
+      "refusal_accuracy": 1.0,
+      "citation_presence": 1.0,
+      "faithfulness": 0.5,
+      "latency_sec": 1.0504514999920502,
+      "answer": "Based on the provided context, the four different types of timeouts supported in HTTPX and their corresponding exceptions are:\n\n1.  **Connect timeout**: Raises a `ConnectTimeout` exception if a socket connection to the requested host is not established within the specified time.\n2.  **Read timeout**: Raises a `ReadTimeout` exception if a chunk of data (e.g., response body) is not received within the specified time.\n3.  **Write timeout**: Raises a `WriteTimeout` exception if a chunk of data (e.g., request body) is not sent within the specified time.\n4.  **Pool timeout**: Raises a `PoolTimeout` exception if a connection cannot be acquired from the connection pool within the specified time.\n\nThese details are found in `httpx-0.27.0/docs/advanced/timeouts.md` at lines 41\u201371."
+    },
+    {
+      "id": "Q-002",
+      "category": "SINGLE_HOP_CODE",
+      "question": "Where is the URL class defined and how does it parse raw byte paths?",
+      "recall": 1.0,
+      "keyword_coverage": 0.5,
+      "refusal_accuracy": 1.0,
+      "citation_presence": 1.0,
+      "faithfulness": 0.0,
+      "latency_sec": 1.5520825000130571,
+      "answer": "Based on the provided context, here is the information regarding the URL class and raw byte paths:\n\n**1. Where is the URL class defined?**\nThe context does not explicitly show the class definition line (e.g., `class URL:`) in `httpx-0.27.0/httpx/_urls.py`. However, it provides methods and properties belonging to the `URL` class within that file:\n*   `httpx-0.27.0/httpx/_urls.py` (L368-L380) defines the `join` method.\n*   `httpx-0.27.0/httpx/_urls.py` (L280-L295) defines the `raw_path` property.\n\n**2. How does it parse raw byte paths?**\nThe context does not describe how the `URL` class *parses* raw byte paths into components. Instead, it describes how the `URL` class *generates* a raw byte path from its internal components via the `raw_path` property.\n\nAccording to `httpx-0.27.0/httpx/_urls.py` (L280-L295), the `raw_path` property constructs the raw bytes as follows:\n1.  It retrieves the `path` from `self._uri_reference.path`. If the path is empty or `None`, it defaults to `\"/\"`.\n2.  It checks if `self._uri_reference.query` is not `None`.\n3.  If a query exists, it appends `\"?\"` followed by the query string to the path.\n4.  Finally, it encodes the resulting string into ASCII bytes using `path.encode(\"ascii\")`.\n\nThe actual parsing logic for URLs (converting a string URL into components like scheme, host, path, etc.) is handled by the `urlparse` function in `httpx-0.27.0/httpx/_urlparse.py` (L151-L283), which returns a `ParseResult` object. This function handles validation, normalization, and quoting of components but does not directly operate on \"raw byte paths\" as input; it operates on string URLs and keyword arguments."
+    },
+    {
+      "id": "Q-003",
+      "category": "SINGLE_HOP_TICKETS",
+      "question": "Why does AsyncClient hang when calling client.stream without an async with context manager according to issue 1240?",
+      "recall": 1.0,
+      "keyword_coverage": 1.0,
+      "refusal_accuracy": 1.0,
+      "citation_presence": 1.0,
+      "faithfulness": 0.5,
+      "latency_sec": 3.0560187000082806,
+      "answer": "According to **Issue #1240** (`issues/1240`, L1-L5), `AsyncClient` hangs indefinitely when calling `client.stream('GET', url)` without using an `async with` context manager or explicitly closing the response because the **connection pool exhausts**.\n\nSpecifically, the issue states:\n> \"When calling client.stream('GET', url) without using an async with context manager or explicitly closing the response, connection pool exhausts and subsequent requests hang.\"\n\nThis is further explained in the discussion comments (`issues/1240#comments-1-2`, L1-L7), where @florimondmanca notes that:\n> \"Streaming responses must always be used as context managers or explicitly read to release the underlying connection back to the pool.\"\n\nAdditionally, the documentation in `httpx-0.27.0/docs/async.md` (L67-L106) warns that in \"manual streaming mode\" (when not using the context manager), it is the developer's duty to call `Response.aclose()` to avoid leaving connections open, which results in resource leaks."
+    },
+    {
+      "id": "Q-004",
+      "category": "EXACT_TOKEN_CODE",
+      "question": "Which file and class defines the codes status HTTPStatus.TOO_MANY_REQUESTS handling?",
+      "recall": 1.0,
+      "keyword_coverage": 1.0,
+      "refusal_accuracy": 1.0,
+      "citation_presence": 1.0,
+      "faithfulness": 0.0,
+      "latency_sec": 18.133695400028955,
+      "answer": "The `HTTPStatus.TOO_MANY_REQUESTS` code is defined in the file `httpx-0.27.0/httpx/_status_codes.py` at line 148.\n\nIt is part of the `HTTPStatus` class (implied by the context of the file and the naming convention `HTTPStatus.TOO_MANY_REQUESTS`), which is an `IntEnum` or similar structure mapping status codes to their names. The specific line is:\n\n```python\nTOO_MANY_REQUESTS = 429, \"Too Many Requests\"\n```\n\n(Source: `httpx-0.27.0/httpx/_status_codes.py`, L148)"
+    },
+    {
+      "id": "Q-005",
+      "category": "OUT_OF_SCOPE",
+      "question": "How do I configure a GraphQL subscription with Apollo Federation in HTTPX?",
+      "recall": 1.0,
+      "keyword_coverage": 1.0,
+      "refusal_accuracy": 1.0,
+      "citation_presence": 1.0,
+      "faithfulness": 1.0,
+      "latency_sec": 5.276963799959049,
+      "answer": "Based on the provided context, I cannot find information on how to configure a GraphQL subscription with Apollo Federation in HTTPX.\n\nThe provided sources only cover:\n*   **Proxy configuration** using the `mounts` argument (Source 1: `httpx-0.27.0/docs/compatibility.md`, L158-L171).\n*   **SOCKS proxy support** (Source 3: `httpx-0.27.0/docs/advanced/proxies.md`, L68-L83).\n*   **Environment variables** for proxying (Source 4: `httpx-0.27.0/docs/advanced/transports.md`, L448-L454).\n*   **SSL verification** basics (Source 5: `httpx-0.27.0/docs/advanced/ssl.md`, L1-L2).\n\nNone of the sources mention GraphQL, Apollo Federation, or subscription handling."
+    },
+    {
+      "id": "Q-006",
+      "category": "MULTI_HOP_CODE",
+      "question": "How does Client.request pass headers and cookies down to the underlying transport dispatch?",
+      "recall": 0.5,
+      "keyword_coverage": 0.3333333333333333,
+      "refusal_accuracy": 0.0,
+      "citation_presence": 1.0,
+      "faithfulness": 1.0,
+      "latency_sec": 10.268716499966104,
+      "answer": "Based on the provided context, I cannot find the specific code or documentation that details how `Client.request` passes headers and cookies down to the underlying transport dispatch.\n\nThe provided sources contain:\n*   **Source 3 (`httpx-0.27.0/httpx/_client.py`, L454-L471)**: Shows the `_build_redirect_request` method, which constructs a new `Request` object with `headers` and `cookies` for redirects, but does not show the main `request` or `send` methods or how they interact with the transport.\n*   **Source 4 (`httpx-0.27.0/CHANGELOG.md`, L257-L268)**: Mentions that `client.send()` no longer accepts a `timeout` argument and that timeout configuration is stored in `request.extensions['timeout']`, but does not describe the passing of headers or cookies to the transport.\n*   **Source 5 (`httpx-0.27.0/docs/advanced/transports.md`, L271-L333)**: Shows examples of mounting transports and a custom transport's `handle_request` signature (`method, url, headers, stream, extensions`), but does not explain how the `Client` prepares these arguments from the request's headers and cookies.\n\nTherefore, the specific mechanism for passing headers and cookies from `Client.request` to the transport is not documented in the provided context."
+    },
+    {
+      "id": "Q-007",
+      "category": "SINGLE_HOP_DOCS",
+      "question": "How do I configure custom SSL certificates or disable SSL verification in an HTTPX client?",
+      "recall": 1.0,
+      "keyword_coverage": 1.0,
+      "refusal_accuracy": 1.0,
+      "citation_presence": 1.0,
+      "faithfulness": 0.0,
+      "latency_sec": 9.625844699970912,
+      "answer": "To configure custom SSL certificates or disable SSL verification in an HTTPX client, you should pass the SSL settings when instantiating the `httpx.Client` (or `httpx.AsyncClient`) object, as these settings cannot be changed on a per-request basis.\n\n**1. Using a Custom CA Bundle (Verification)**\nYou can specify a custom Certificate Authority (CA) bundle by passing a file path to the `verify` parameter.\n*   **File Path:**\n    ```python\n    client = httpx.Client(verify=\"path/to/client.pem\")\n    ```\n    *(Source: httpx-0.27.0/docs/advanced/ssl.md, L10-L12)*\n\n*   **SSL Context:**\n    You can also pass a standard library `ssl.SSLContext` or use the helper `httpx.create_ssl_context()`.\n    ```python\n    import ssl\n    context = ssl.create_default_context()\n    context.load_verify_locations(cafile=\"/tmp/client.pem\")\n    client = httpx.Client(verify=context)\n    ```\n    *(Source: httpx-0.27.0/docs/advanced/ssl.md, L16-L22)*\n\n**2. Disabling SSL Verification**\nTo disable verification entirely (not recommended for production), set `verify=False`.\n*   **Client Instance:**\n    ```python\n    client = httpx.Client(verify=False)\n    ```\n    *(Source: httpx-0.27.0/docs/advanced/ssl.md, L55-L56)*\n\n**3. Client-Side Certificates**\nIf you need to provide a client-side certificate for mutual TLS, use the `cert` parameter. This accepts a file path, a tuple of `(cert_file, key_file)`, or a tuple of `(cert_file, key_file, password)`.\n*   **Example:**\n    ```python\n    cert = (\"path/to/client.pem\", \"path/to/client.key\")\n    client = httpx.Client(cert=cert)\n    ```\n    *(Source: httpx-0.27.0/docs/advanced/ssl.md, L63-L76)*\n\n**Important Note:**\nThe `client.get(...)` and other request methods do **not** support changing SSL settings per request. If you need different SSL configurations for different requests, you must create separate `httpx.Client` instances with the specific settings for each.\n*(Source: httpx-0.27.0/docs/advanced/ssl.md, L57-L60)*"
+    },
+    {
+      "id": "Q-008",
+      "category": "SINGLE_HOP_TICKETS",
+      "question": "How was the HTTP/2 keepalive connection drop issue fixed in ticket 1405?",
+      "recall": 1.0,
+      "keyword_coverage": 1.0,
+      "refusal_accuracy": 1.0,
+      "citation_presence": 1.0,
+      "faithfulness": 0.5,
+      "latency_sec": 0.8795463000424206,
+      "answer": "The HTTP/2 keepalive connection drop issue in ticket #1405 was fixed by adding support for the `keepalive_expiry` parameter in `httpcore.AsyncConnectionPool`.\n\nAccording to the discussion on the issue, the fix allows developers to safely recycle idle HTTP/2 connections by specifying a timeout, for example: `httpcore.AsyncConnectionPool(keepalive_expiry=5.0)` (Source 2: issues/1405#comments-1-1, L3). This parameter is defined in the configuration documentation as the \"Time limit on idle keep-alive connections in seconds\" (Source 5: httpx-0.27.0/httpx/_config.py, L292)."
+    }
+  ]
+}

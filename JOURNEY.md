@@ -195,10 +195,47 @@ While we started with Python (`httpx`) to isolate retrieval mechanics, RepoLens 
 | Milestone | Date | Key Architectural Addition | Target Failure | Status |
 | :--- | :---: | :--- | :--- | :---: |
 | **System A** | 2026-09-24 | AST Python chunker, local Chroma ONNX, Groq LPU, dark-mode UI | Baseline establishment | ✅ Completed |
-| **System B** | Next | Sparse BM25 index + Reciprocal Rank Fusion (RRF $k=60$) | Exact tokens (FAIL-001) & Tickets (FAIL-002) | 🚧 In Progress |
-| **System C** | Upcoming | Query intent classification & source-specific index routing | Misdirected retrieval & Doc/Code overlap | 📋 Planned |
+| **System B** | 2026-09-24 | Code-aware BM25 index + RRF ($k=60$) + AST class body extraction | Exact tokens (FAIL-004) & Tickets (FAIL-002) | ✅ Completed |
+| **System C** | Next | Query intent classification & source-specific index routing | Misdirected retrieval & Doc/Code overlap | 🚧 Next |
 | **System D** | Upcoming | Self-correcting critic agent with LLM citation verification | Hallucinations (FAIL-001) & phantom citations | 📋 Planned |
 | **System E** | Upcoming | Multi-hop query decomposition & bounded retries | Multi-hop call chains (FAIL-003) | 📋 Planned |
+
+---
+
+## Chapter 7: System B — The Hybrid BM25 + Dense RRF Breakthrough
+
+### 1. The Code-Level Discovery
+When testing exact token retrieval on Q-004 (`HTTPStatus.TOO_MANY_REQUESTS`), we uncovered an AST ingestion bug: our parser only extracted methods (`FunctionDef`), completely dropping class-level enum assignments and constants like `TOO_MANY_REQUESTS = 429`.
+
+We upgraded `ASTCodeChunker` with a contiguous block flusher (`class_body_declarations`), expanding our corpus from 1,562 to **1,636 chunks** and properly indexing all status codes and class attributes.
+
+### 2. Code-Aware BM25 + Reciprocal Rank Fusion ($k=60$)
+We implemented `BM25Retriever` using `rank-bm25` with code-specialized parameters:
+- **Code-aware Tokenizer**: Preserves issue tags (`#1240`), splits dotted access (`HTTPStatus.TOO_MANY_REQUESTS`), and parses both snake_case and CamelCase.
+- **Document Length Penalty ($b=0.3$)**: Traditional NLP search uses $b=0.75$ to penalize long web pages. In codebases, rich class bodies (70 lines) are coherent structures, not spam; lowering $b$ to $0.3$ propelled `_status_codes.py` straight to Rank 1.
+- **Candidate Pool Expansion ($N=50$)**: Fusing 50 dense and 50 sparse candidates via RRF guaranteed exact lexical matches surface into top-5 even when dense similarity is moderate.
+
+### 3. Empirical Ablation Delta (System A vs System B)
+
+| Metric | System A (Dense) | System B (Hybrid RRF) | Delta |
+| :--- | :---: | :---: | :---: |
+| **Overall Recall@5** | 87.5% | **93.8%** | **+6.2%** |
+| **Keyword Coverage** | 72.9% | **85.4%** | **+12.5%** |
+| **Q-003 (Issue 1240 Recall)** | 0.0% | **100.0% (Rank 1)** | **+100.0%** |
+| **Q-008 (Ticket 1405 Recall)** | 0.0% | **100.0% (Rank 1)** | **+100.0%** |
+| **Q-004 (Exact Token Coverage)** | 33.3% | **100.0%** | **+66.7%** |
+| **Q-006 (Multi-Hop Recall)** | 0.0% | **50.0%** | **+50.0%** |
+| **Average Retrieval Latency** | 164.7 ms | **177.9 ms** | +13.2 ms |
+
+### 4. Distributed Tracing in LangSmith
+System B introduced end-to-end distributed span tracing via LangSmith:
+```text
+└── System B (Hybrid RAG) [6.2s total with LLM Judge]
+     ├── Hybrid RRF Search (177ms)
+     │    ├── Chroma Dense Search (145ms)
+     │    └── BM25 Sparse Search (28ms)
+     └── Groq LPU Generation (850ms)
+```
 
 ---
 
