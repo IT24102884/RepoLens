@@ -6,7 +6,7 @@ client = TestClient(app)
 def test_health_endpoint():
     response = client.get('/health')
     assert response.status_code == 200
-    assert response.json() == {'status': 'healthy', 'service': 'MARKS Engine'}
+    assert response.json() == {'status': 'healthy', 'service': 'RepoLens Engine'}
 
 def test_stats_endpoint():
     response = client.get('/api/stats')
@@ -22,5 +22,5 @@ def test_empty_query_validation():
 def test_frontend_index_serving():
     response = client.get('/')
     assert response.status_code == 200
-    assert 'MARKS' in response.text
+    assert 'RepoLens' in response.text
     assert len(response.text) > 1000
