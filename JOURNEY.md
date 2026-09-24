@@ -1,0 +1,203 @@
+# The Engineering Journey of RepoLens
+
+> A living chronicle of architectural decisions, empirical failure analyses, and systematic upgrades in building a deterministic, multi-source codebase intelligence engine.
+
+---
+
+## Prologue: The Core Problem & Our Engineering Philosophy
+
+Most developer-facing retrieval-augmented generation (RAG) tools work well on textbook questions like *"How do I send a GET request in HTTPX?"* but fail when confronted with real-world engineering queries:
+- *"Where is the URL class declared and how does it parse raw byte paths?"*
+- *"Why does AsyncClient hang when calling client.stream according to Issue #1240?"*
+- *"Which file and class defines HTTPStatus.TOO_MANY_REQUESTS handling?"*
+- *"How does Client.request pass headers down to the underlying transport dispatch?"*
+
+When traditional RAG systems ingest a repository, they typically split text every 500 characters and throw embeddings into a vector database. In practice:
+1. **Syntax is torn in half**: Function signatures are separated from their bodies, and docstrings lose their class scope.
+2. **Exact tokens are blurred away**: Vector embeddings project symbols into high-dimensional semantic clusters. An exact enum like `HTTPStatus.TOO_MANY_REQUESTS` gets smoothed into "rate limiting" or "client errors", failing to retrieve the literal declaration.
+3. **Issue trackers are drowned out**: Bug discussions and pull request reviews use informal, conversational language that gets overwhelmed by formal API documentation in dense similarity searches.
+4. **Multi-hop architecture is ignored**: Answering how a request traverses from client to transport requires tracing cross-file call chains, which flat single-shot retrieval cannot bridge.
+5. **Citations are often fictional**: Models confidently explain architecture while hallucinating line ranges or citing files that do not contain the referenced code.
+
+### Our Core Philosophy: Empirical Ablation
+We decided not to build a black box. Instead, we established an **ablation-driven engineering process**:
+- **Build iteratively**: Construct the simplest working baseline (**System A**), evaluate it against an 8-category golden test set, and measure exactly where and why it breaks.
+- **Never hide failures**: Every regression, hallucination, and retrieval miss is cataloged in a structured failure log with root causes and hypotheses.
+- **Hypothesize and verify**: Each subsequent upgrade (Systems B through E) introduces a single architectural variable designed to eliminate specific failure modes, proved with quantitative deltas.
+
+```mermaid
+flowchart LR
+    A["System A<br/>Baseline Dense RAG"] -->|FAIL: Exact tokens & tickets| B["System B<br/>Hybrid BM25 + RRF"]
+    B -->|FAIL: Modality confusion| C["System C<br/>Intent & Modality Router"]
+    C -->|FAIL: Hallucinated citations| D["System D<br/>Self-Correction Critic"]
+    D -->|FAIL: Incomplete multi-hop| E["System E<br/>Bounded Retry Engine"]
+```
+
+---
+
+## Chapter 1: The Foundation — Ingestion & Corpus Architecture
+
+Our benchmark target repository is **`encode/httpx` (v0.27.0)**: a widely used Python HTTP client featuring async transports, connection pooling, complex URL parsing, and rich documentation.
+
+### 1. The Chunking Dilemma
+Early on, we faced a choice: should we use naive character-based recursive chunking, or build language-aware chunkers?
+
+| Approach | Pros | Cons | Decision |
+| :--- | :--- | :--- | :---: |
+| **Fixed-Window (500 chars)** | Trivial to implement, uniform chunk sizes | Splices functions mid-line, destroys indentation, loses syntax context | ❌ Rejected |
+| **Regex Splitting** | Better than fixed-window | Brittle, fails on nested classes, decorators, and multi-line docstrings | ❌ Rejected |
+| **AST & Semantic Chunking** | Preserves class/method boundaries, retains line numbers, tracks doc hierarchy | Requires parser per language/format |  **Adopted** |
+
+### 2. Multi-Source Ingestion Pipeline
+We built a unified ingestion pipeline producing structured `DocumentChunk` objects with exact line numbers and metadata:
+
+- **Python AST Chunker (`src/ai/ingestion/code_chunker.py`)**:
+  - Uses Python's native `ast` module to walk module bodies.
+  - Extracts classes and top-level functions as standalone chunks, preserving decorators, docstrings, and exact `start_line` to `end_line` coordinates.
+  - Retains module-level declarations and imports in a dedicated module preamble chunk.
+- **Hierarchical Markdown Chunker (`src/ai/ingestion/doc_chunker.py`)**:
+  - Splits documentation on header boundaries (`#`, `##`, `###`), preserving the breadcrumb hierarchy (e.g., `Advanced > Timeouts > Pool Timeouts`).
+- **GitHub Ticket Chunker (`src/ai/ingestion/ticket_chunker.py`)**:
+  - Ingests issue descriptions, state tags, and chronological discussion comments.
+  - Formats comment threads with author attribution and explicit line indexing.
+
+**Total Ingested Corpus**: **1,562 chunks** (1,158 AST code chunks, 400 doc sections, 4 bug tickets) persisted to `data/processed/chunks.jsonl`.
+
+---
+
+## Chapter 2: System A — The Baseline Dense RAG Engine
+
+### 1. Architecture
+With the corpus prepared, we assembled **System A**:
+- **Vector Store**: Local ChromaDB instance with ONNX-accelerated `all-MiniLM-L6-v2` embeddings (`384` dimensions). Runs locally on CPU with zero external API dependencies or embedding costs.
+- **Inference LPU**: Groq API running `qwen/qwen3.8-27b` with temperature `0.1`. Provides ultra-fast generation latency (~600–900 ms).
+- **Prompt Contract**: A strict system prompt enforcing two non-negotiable rules:
+  1. *Ground every statement in retrieved chunks with exact citations (`[file.py Lxx-Lyy]`).*
+  2. *If the context is insufficient, explicitly state what is missing rather than guessing.*
+- **Interactive UI**: A standalone dark-mode web application (`frontend/`) connecting to a FastAPI backend (`src/backend/api/main.py`), featuring live latency telemetry (vector retrieval vs. LLM generation) and an interactive citation drawer.
+
+### 2. Packaging Challenge & Resolution
+During development, running `uv run pytest` triggered a packaging error:
+```
+setuptools.errors.PackageDiscoveryError: Multiple top-level packages discovered in a flat-layout: ['ai', 'backend', 'frontend', 'data'].
+```
+**Why it happened**: Having multiple directories at the repository root confused setuptools about which directory was the primary package.  
+**How we resolved it**: We migrated to the modern Python **`src-layout`** standard (`src/ai/` and `src/backend/`), configured `pyproject.toml` with `pythonpath = ["src"]`, and organized tests cleanly into `tests/unit/` and `tests/integration/`. All 14 tests passed immediately in 1.04s.
+
+---
+
+## Chapter 3: The Empirical Reckoning — System A Evaluation
+
+We built an automated evaluation harness (`eval/run_eval.py`) covering 8 distinct query categories:
+1. `SINGLE_HOP_DOCS` (Timeouts, SSL setup)
+2. `SINGLE_HOP_CODE` (URL class definition, byte parsing)
+3. `SINGLE_HOP_TICKETS` (Issue #1240 connection leaks, Issue #1405 keepalive drops)
+4. `EXACT_TOKEN_CODE` (`HTTPStatus.TOO_MANY_REQUESTS` definition)
+5. `OUT_OF_SCOPE` (GraphQL Apollo Federation in HTTPX — testing refusal)
+6. `MULTI_HOP_CODE` (`Client.request` delegation to transport dispatch)
+
+We also built an **LLM-as-a-judge** faithfulness evaluator using Groq to score whether generated answers make claims unsupported by the retrieved snippets.
+
+### System A Benchmark Results
+
+| Metric | Score | Analysis |
+| :--- | :---: | :--- |
+| **Recall@5** | **62.5%** | Retrieved target context on 5/8 questions; completely missed tickets and multi-hop queries. |
+| **Keyword Coverage** | **72.9%** | Key identifier tokens present in retrieved chunks. |
+| **Faithfulness (LLM Judge)** | **68.8%** | Generally faithful when context is present, but suffered severe drops when context was incomplete. |
+| **Refusal Accuracy** | **75.0%** | Successfully refused out-of-scope query (Q-005) in 20s, but failed on Q-004. |
+| **Citation Presence** | **100.0%** | Every single answer included file and line references. |
+| **Average Latency** | **5.29s** | P50 latency was **~1.3s** (0.25s retrieval, 0.7s generation); outliers occurred on complex refusals. |
+| **Operating Cost** | **$0.00** | Local embeddings + Groq free tier. |
+
+---
+
+## Chapter 4: Failure Analysis — What Broke and Why
+
+Rather than accepting the baseline score as a finished product, we inspected every single failure. These findings form the empirical foundation for our next iterations.
+
+### Failure 1: Exact Token Oblivion (Query Q-004)
+- **Question**: *"Which file and class defines the codes status HTTPStatus.TOO_MANY_REQUESTS handling?"*
+- **What happened**: Chroma dense retrieval returned general status code helper methods (`is_client_error`) and `Limits` in `_config.py`, but completely missed the exact status enum definition. The LLM correctly stated that the snippet was missing and refused to answer.
+- **Root Cause**: Dense vector embeddings project text into continuous semantic space. Words like `TOO_MANY_REQUESTS` get mapped to concepts like "rate limiting" or "HTTP errors". Dense search has no mechanism to reward exact lexical string matches over semantic similarity.
+- **Measured Result**: Keyword Coverage dropped to **33.3%**.
+
+### Failure 2: Dense Semantic Blindspot on Bug Tickets (Queries Q-003 & Q-008)
+- **Question**: *"Why does AsyncClient hang when calling client.stream without an async with context manager according to issue 1240?"*
+- **What happened**: **Recall@5 dropped to 0.0%**. The vector search retrieved general connection documentation and changelogs, burying the ticket chunks.
+- **Root Cause**: Issue tickets use conversational, narrative prose (*"Hey, I noticed that when I stream..."*) with specific issue numbers (`"issue 1240"`). The dense embedding model favored dense technical documentation over issue discussions, ranking the true ticket below rank 5.
+
+### Failure 3: Ungrounded Extrapolation & Hallucination (Query Q-002)
+- **Question**: *"Where is the URL class defined and how does it parse raw byte paths?"*
+- **What happened**: Vector search retrieved property accessors in `httpx/_urls.py` (L280-L295) and module docstrings in `httpx/_urlparse.py` (L1-L17), but missed the `class URL:` declaration. The LLM attempted to extrapolate how URL parsing works, hallucinating details about `rfc3986` replacement.
+- **Measured Result**: **Faithfulness scored 0.0%** by the LLM judge.
+- **Root Cause**: Dense search retrieved chunks discussing "URL parsing", but failed to retrieve the actual definition chunk because definition chunks have low semantic overlap with descriptive questions.
+
+### Failure 4: The Multi-Hop Disconnect (Query Q-006)
+- **Question**: *"How does Client.request pass headers and cookies down to the underlying transport dispatch?"*
+- **What happened**: **Recall@5 was 0.0%**. The retriever returned general transport overview docs and changelog entries.
+- **Root Cause**: Answering an architectural traversal question requires following a call path across multiple files:
+  $$\text{Client.request} \longrightarrow \text{Client.build\_request} \longrightarrow \text{Transport.handle\_request}$$
+  A flat top-5 retrieval cannot bridge this multi-step relationship in a single pass.
+
+---
+
+## Chapter 5: Architectural Decisions & Roadmap
+
+```mermaid
+graph TD
+    subgraph "System B: Hybrid RRF"
+        BM25["BM25 Lexical Index<br/>(Exact symbols, issue numbers)"]
+        Dense["ChromaDB Vector Index<br/>(all-MiniLM-L6-v2)"]
+        RRF["Reciprocal Rank Fusion<br/>RRF(d) = Σ 1 / (60 + rank)"]
+        BM25 --> RRF
+        Dense --> RRF
+    end
+
+    subgraph "System C: Modality Router"
+        Router{"Intent Router"}
+        Router -->|Code Def| CodeSearch["AST Symbol Index"]
+        Router -->|Concept| DocSearch["Documentation Index"]
+        Router -->|Bug/PR| TicketSearch["Issue Index"]
+    end
+
+    subgraph "System D: Verification Critic"
+        Judge{"Self-Correction Critic"}
+        Judge -->|Hallucination Detected| Rewrite["Re-retrieve / Prune"]
+        Judge -->|Grounded| Output["Verified Answer"]
+    end
+```
+
+### Why BM25 + Reciprocal Rank Fusion for System B?
+To fix Failures 1 and 2, we evaluated several options:
+
+1. **Option A: Switch to a larger vector embedding model (e.g. OpenAI `text-embedding-3-large`)**
+   - *Why rejected*: Even massive 3072-dimensional embeddings smooth away specific token strings like `1240` or `HTTPStatus.TOO_MANY_REQUESTS`. Dense representations fundamentally trade exact lexical precision for semantic generalization.
+2. **Option B: Pure score-weighted linear combination ($\alpha \cdot S_{\text{dense}} + (1-\alpha) \cdot S_{\text{sparse}}$)**
+   - *Why rejected*: Cosine similarities (bounded $[0, 1]$) and BM25 scores (unbounded $[0, \infty)$) have completely different scale, variance, and distributional properties. Tuning $\alpha$ becomes fragile and breaks across different document lengths.
+3. **Option C: Reciprocal Rank Fusion (RRF)**
+   - *Why chosen*: RRF operates entirely on relative ordinal ranks:
+     $$RRF(d \in D) = \sum_{m \in M} \frac{1}{k + r_m(d)}$$
+     where $k = 60$ is the standard smoothing parameter, and $r_m(d)$ is the rank of document $d$ in system $m$. RRF requires zero score calibration, is immune to score distribution mismatches, and guarantees that any document scoring high in either BM25 (e.g., exact match on `"1240"`) or dense similarity is promoted into the top candidates.
+
+### Vision: Multi-Language & Polyglot Evolution
+While we started with Python (`httpx`) to isolate retrieval mechanics, RepoLens is architected to be **language-agnostic**:
+- Our `BaseChunker` interface separates AST traversal from chunk storage.
+- By integrating **Tree-sitter** in future updates, the same AST-aware chunking pipeline will natively support TypeScript, JavaScript, Go, Rust, Java, and C/C++.
+- The downstream retrieval, routing, critic, and verification agents remain 100% language-neutral.
+
+---
+
+## Chapter 6: Living Log of Upgrades & Experiments
+
+| Milestone | Date | Key Architectural Addition | Target Failure | Status |
+| :--- | :---: | :--- | :--- | :---: |
+| **System A** | 2026-09-24 | AST Python chunker, local Chroma ONNX, Groq LPU, dark-mode UI | Baseline establishment | ✅ Completed |
+| **System B** | Next | Sparse BM25 index + Reciprocal Rank Fusion (RRF $k=60$) | Exact tokens (FAIL-001) & Tickets (FAIL-002) | 🚧 In Progress |
+| **System C** | Upcoming | Query intent classification & source-specific index routing | Misdirected retrieval & Doc/Code overlap | 📋 Planned |
+| **System D** | Upcoming | Self-correcting critic agent with LLM citation verification | Hallucinations (FAIL-001) & phantom citations | 📋 Planned |
+| **System E** | Upcoming | Multi-hop query decomposition & bounded retries | Multi-hop call chains (FAIL-003) | 📋 Planned |
+
+---
+
+*This journal is updated at every ablation stage with reproducible metrics, diffs, and post-mortem analyses.*
