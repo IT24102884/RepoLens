@@ -4,6 +4,14 @@ from typing import Any, Dict, List, Optional, Tuple
 import chromadb
 from ai.core.models import DocumentChunk, DocumentType
 
+try:
+    from langsmith import traceable
+except ImportError:
+    def traceable(*args, **kwargs):
+        def decorator(f):
+            return f
+        return decorator
+
 
 class ChromaRetriever:
     """High-throughput local Vector Retriever backed by ChromaDB and ONNX embeddings."""
@@ -93,6 +101,7 @@ class ChromaRetriever:
 
         print(f"[+] All {self.collection.count()} chunks indexed successfully in ChromaDB at {self.persist_directory}!\n")
 
+    @traceable(name="Chroma Dense Search", run_type="retriever")
     def search(
         self,
         query: str,

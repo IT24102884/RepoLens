@@ -6,6 +6,14 @@ from groq import Groq
 from ai.core.models import DocumentChunk
 from ai.retrieval.chroma_retriever import ChromaRetriever
 
+try:
+    from langsmith import traceable
+except ImportError:
+    def traceable(*args, **kwargs):
+        def decorator(f):
+            return f
+        return decorator
+
 load_dotenv()
 
 
@@ -27,6 +35,19 @@ class BaselineRAG:
 
         self.client = Groq(api_key=api_key)
 
+    @traceable(name="Groq LPU Generation", run_type="llm")
+    def _call_llm(self, system_instruction: str, query: str) -> str:
+        chat_completion = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": query},
+            ],
+            temperature=0.1,
+        )
+        return chat_completion.choices[0].message.content or ""
+
+    @traceable(name="System A (Baseline RAG)", run_type="chain")
     def answer(self, query: str) -> Dict[str, Any]:
         t_start = time.perf_counter()
 
@@ -56,18 +77,9 @@ class BaselineRAG:
 
         # Call Groq LPU endpoint
         t_gen = time.perf_counter()
-        chat_completion = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": query},
-            ],
-            temperature=0.1,
-        )
+        answer_text = self._call_llm(system_instruction, query)
         generation_ms = (time.perf_counter() - t_gen) * 1000
         total_ms = (time.perf_counter() - t_start) * 1000
-
-        answer_text = chat_completion.choices[0].message.content or ""
 
         return {
             "query": query,
