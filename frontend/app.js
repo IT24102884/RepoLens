@@ -1,6 +1,35 @@
+let currentSystem = "b";
+
 document.addEventListener("DOMContentLoaded", () => {
   loadRepoStats();
 });
+
+function switchSystem(sys) {
+  currentSystem = sys;
+  const btnA = document.getElementById("btnSystemA");
+  const btnB = document.getElementById("btnSystemB");
+  const badge = document.getElementById("headerSystemBadge");
+
+  if (sys === "b") {
+    if (btnB) btnB.classList.add("active");
+    if (btnA) btnA.classList.remove("active");
+    if (badge) {
+      badge.textContent = "System B (Hybrid BM25+RRF)";
+      badge.style.color = "#4ade80";
+      badge.style.borderColor = "rgba(74, 222, 128, 0.4)";
+      badge.style.backgroundColor = "rgba(74, 222, 128, 0.1)";
+    }
+  } else {
+    if (btnA) btnA.classList.add("active");
+    if (btnB) btnB.classList.remove("active");
+    if (badge) {
+      badge.textContent = "System A (Baseline Dense)";
+      badge.style.color = "#60a5fa";
+      badge.style.borderColor = "rgba(59, 130, 246, 0.4)";
+      badge.style.backgroundColor = "rgba(59, 130, 246, 0.1)";
+    }
+  }
+}
 
 async function loadRepoStats() {
   try {
@@ -49,7 +78,13 @@ async function submitQuery(e) {
   const statusIndicator = document.getElementById("statusIndicator");
   const statusText = document.getElementById("statusText");
   if (statusIndicator) statusIndicator.style.display = "flex";
-  if (statusText) statusText.textContent = "Searching ChromaDB vectors (1,562 chunks)...";
+  if (statusText) {
+    if (currentSystem === "b") {
+      statusText.textContent = "Running Hybrid Search (Chroma Dense + BM25 Sparse with RRF k=60)...";
+    } else {
+      statusText.textContent = "Running ChromaDB Dense Vector Search (cosine similarity)...";
+    }
+  }
 
   const sendBtn = document.getElementById("sendBtn");
   if (sendBtn) sendBtn.disabled = true;
@@ -59,7 +94,7 @@ async function submitQuery(e) {
     const response = await fetch("/api/query", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: query, top_k: 5 }),
+      body: JSON.stringify({ query: query, top_k: 5, system: currentSystem }),
     });
 
     if (!response.ok) {
@@ -98,12 +133,40 @@ function appendUserMessage(text) {
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+function renderMarkdown(rawText) {
+  if (!rawText) return "";
+
+  // Extract and stash code blocks to avoid messing up escaping
+  const codeBlocks = [];
+  let text = rawText.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (match, lang, code) => {
+    const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
+    codeBlocks.push(`<pre class="code-block"><code class="language-${lang}">${escapeHtml(code.trim())}</code></pre>`);
+    return placeholder;
+  });
+
+  // Basic markdown styling
+  text = escapeHtml(text);
+  // Inline code `...`
+  text = text.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+  // Bold **...**
+  text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  // Newlines
+  text = text.replace(/\n\n/g, "<br/><br/>").replace(/\n/g, "<br/>");
+
+  // Restore code blocks
+  codeBlocks.forEach((block, idx) => {
+    text = text.replace(`__CODE_BLOCK_${idx}__`, block);
+  });
+
+  return text;
+}
+
 function appendAIMessage(data) {
   const chatMessages = document.getElementById("chatMessages");
   const div = document.createElement("div");
   div.className = "ai-msg-row";
 
-  let renderedAnswer = escapeHtml(data.answer).replace(/\n/g, "<br/>");
+  let renderedAnswer = renderMarkdown(data.answer);
 
   let citationsHtml = "";
   if (data.citations && data.citations.length > 0) {
@@ -139,9 +202,12 @@ function appendAIMessage(data) {
     `;
   }
 
+  const isSystemB = (data.system_version || "").includes("System B");
+  const badgeColor = isSystemB ? "#4ade80" : "#60a5fa";
+
   div.innerHTML = `
     <div class="ai-avatar">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${badgeColor}" stroke-width="2">
         <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
         <polyline points="2 17 12 22 22 17"></polyline>
         <polyline points="2 12 12 17 22 12"></polyline>
@@ -151,7 +217,7 @@ function appendAIMessage(data) {
     <div class="ai-bubble">
       <div class="ai-meta">
         <div>
-          <strong style="color: #ffffff;">RepoLens Engine</strong> • <span>${data.system_version}</span>
+          <strong style="color: #ffffff;">RepoLens Engine</strong> • <span style="color: ${badgeColor}; font-weight: 500;">${data.system_version}</span>
         </div>
         <div class="ai-timing">
           ⚡ ${(data.total_latency_ms / 1000).toFixed(2)}s (Ret: ${data.retrieval_latency_ms.toFixed(0)}ms, Gen: ${data.generation_latency_ms.toFixed(0)}ms)

@@ -6,12 +6,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from ai.agents.baseline_rag import BaselineRAG
+from ai.agents.hybrid_rag import HybridRAG
 from backend.api.schemas import CitationItem, QueryRequest, QueryResponse, RepoStatsResponse
 
 app = FastAPI(
     title="RepoLens: Multi-Agent Knowledge & Citation Engine",
     description="Deterministic repository knowledge and citation engine.",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -22,15 +23,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Shared RAG instance, initialized lazily on first query
-_rag_instance: BaselineRAG | None = None
+# Shared RAG instances, initialized lazily on first query
+_baseline_rag: BaselineRAG | None = None
+_hybrid_rag: HybridRAG | None = None
 
 
-def get_rag() -> BaselineRAG:
-    global _rag_instance
-    if _rag_instance is None:
-        _rag_instance = BaselineRAG()
-    return _rag_instance
+def get_baseline_rag() -> BaselineRAG:
+    global _baseline_rag
+    if _baseline_rag is None:
+        _baseline_rag = BaselineRAG()
+    return _baseline_rag
+
+
+def get_hybrid_rag() -> HybridRAG:
+    global _hybrid_rag
+    if _hybrid_rag is None:
+        _hybrid_rag = HybridRAG()
+    return _hybrid_rag
 
 
 @app.get("/health")
@@ -60,8 +69,8 @@ def get_repo_stats() -> RepoStatsResponse:
                 elif dtype == "issue_pr":
                     ticket_count += 1
 
-    total = code_count + doc_count + ticket_count or 1562
-    code_count = code_count or 1158
+    total = code_count + doc_count + ticket_count or 1636
+    code_count = code_count or 1232
     doc_count = doc_count or 400
     ticket_count = ticket_count or 4
 
@@ -72,9 +81,9 @@ def get_repo_stats() -> RepoStatsResponse:
         code_chunks=code_count,
         doc_chunks=doc_count,
         ticket_chunks=ticket_count,
-        vector_store="ChromaDB (all-MiniLM-L6-v2 ONNX)",
+        vector_store="ChromaDB (all-MiniLM-L6-v2) + BM25 Sparse",
         generator_model="Groq (qwen/qwen3.8-27b)",
-        system_status="System A (Baseline Dense RAG) Online",
+        system_status="System B (Hybrid BM25 + Dense RRF) Active",
     )
 
 
@@ -84,8 +93,15 @@ def handle_query(req: QueryRequest) -> QueryResponse:
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
     try:
-        rag = get_rag()
-        rag_output = rag.answer(req.query.strip())
+        use_system_a = req.system.strip().lower() == "a"
+        if use_system_a:
+            rag = get_baseline_rag()
+            rag_output = rag.answer(req.query.strip())
+            version_str = "System A (Baseline Dense RAG)"
+        else:
+            rag = get_hybrid_rag()
+            rag_output = rag.answer(req.query.strip())
+            version_str = "System B (Hybrid BM25 + Dense RRF)"
 
         citations: List[CitationItem] = []
         for chunk in rag_output.get("retrieved_chunks", []):
@@ -117,7 +133,7 @@ def handle_query(req: QueryRequest) -> QueryResponse:
             retrieval_latency_ms=round(rag_output.get("retrieval_latency_ms", 0.0), 1),
             generation_latency_ms=round(rag_output.get("generation_latency_ms", 0.0), 1),
             total_latency_ms=round(rag_output.get("total_latency_ms", 0.0), 1),
-            system_version="System A (Baseline Dense RAG)",
+            system_version=version_str,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Generation error: {str(e)}")

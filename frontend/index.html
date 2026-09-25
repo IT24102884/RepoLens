@@ -33,7 +33,7 @@
       <div>
         <div class="brand-row">
           <span class="brand-name">RepoLens</span>
-          <span class="badge-system">System A (Baseline RAG)</span>
+          <span class="badge-system" id="headerSystemBadge">System B (Hybrid BM25+RRF)</span>
         </div>
         <p class="brand-sub">Multi-Agent Repository Knowledge & Citation Engine</p>
       </div>
@@ -45,13 +45,13 @@
       <span class="pill-label">Target:</span>
       <span class="pill-val" id="headerRepoName">encode/httpx (0.27.0)</span>
       <span class="pill-sep">|</span>
-      <span class="pill-count" id="headerTotalChunks">1,562 chunks</span>
+      <span class="pill-count" id="headerTotalChunks">1,636 chunks</span>
     </div>
 
     <!-- System Status -->
     <div class="header-status">
       <span class="status-indicator"></span>
-      <span class="status-text">Groq & Chroma Online</span>
+      <span class="status-text">Groq & Chroma + BM25 Online</span>
     </div>
   </header>
 
@@ -61,12 +61,33 @@
     <!-- SIDEBAR -->
     <aside class="sidebar">
       
+      <!-- Architecture Mode Selector -->
+      <div class="side-section">
+        <h3 class="section-title">Architecture Ablation</h3>
+        <div class="arch-toggle-container">
+          <button type="button" id="btnSystemB" class="arch-btn active" onclick="switchSystem('b')">
+            <div class="arch-btn-header">
+              <span class="arch-dot green"></span>
+              <strong>System B: Hybrid RAG</strong>
+            </div>
+            <span class="arch-desc">Chroma Dense + BM25 (RRF k=60)</span>
+          </button>
+          <button type="button" id="btnSystemA" class="arch-btn" onclick="switchSystem('a')">
+            <div class="arch-btn-header">
+              <span class="arch-dot blue"></span>
+              <strong>System A: Baseline</strong>
+            </div>
+            <span class="arch-desc">Chroma Dense Vector Only</span>
+          </button>
+        </div>
+      </div>
+
       <!-- Telemetry Stats -->
       <div class="side-section">
         <h3 class="section-title">Repository Telemetry</h3>
         <div class="stat-card">
           <span class="stat-name">Code AST Chunks</span>
-          <span class="stat-num" id="statCodeChunks">1,158</span>
+          <span class="stat-num" id="statCodeChunks">1,232</span>
         </div>
         <div class="stat-card">
           <span class="stat-name">Doc Chunks</span>

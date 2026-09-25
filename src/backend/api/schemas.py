@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 class QueryRequest(BaseModel):
     query: str = Field(..., description="The user's technical question about the repository")
     top_k: int = Field(default=5, ge=1, le=20, description="Number of context chunks to retrieve")
+    system: str = Field(default="b", description="System architecture: 'a' for Baseline Dense RAG, 'b' for Hybrid BM25+RRF")
 
 
 class CitationItem(BaseModel):
