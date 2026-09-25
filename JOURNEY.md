@@ -324,4 +324,45 @@ This motivates **System D (Verification Critic)**: an active verification critic
 
 ---
 
+## Chapter 10: Dynamic Polyglot Repository Ingestion & Decoupled Domain Routing
+
+### 1. From Static Benchmark to Arbitrary Repository Knowledge Engine
+Previously, RepoLens operated on a pre-indexed benchmark repository (`encode/httpx`). While effective for controlled ablation studies, real-world deployment requires ingesting arbitrary open-source and proprietary software repositories on-the-fly.
+
+To support arbitrary user-submitted repositories without regression or domain hardcoding, we engineered a dynamic ingestion and classification pipeline:
+
+```mermaid
+flowchart TD
+    UserURL["User GitHub URL Input"] --> ShallowClone["Shallow Clone (git clone --depth 1)"]
+    ShallowClone --> ZeroWasteFilter["Zero-Waste File Filter (Discard .venv, vendor, bundles, >250KB)"]
+    ZeroWasteFilter --> RepoProfiler["RepoProfiler (package.json, pyproject.toml, go.mod, README)"]
+    RepoProfiler --> PolyglotChunker["ASTCodeChunker + MarkdownDocChunker"]
+    PolyglotChunker --> DualIndex["ChromaDB ONNX Embeddings + BM25Okapi"]
+    DualIndex --> DynamicRAG["Dynamic System C Instance with RepoProfile & Distance Gating"]
+```
+
+### 2. Architectural Pillars
+1. **Shallow Zero-Waste Ingestion (`RepoCloner`)**:
+   - Executes `git clone --depth 1 --single-branch` into isolated `data/repos/{slug}` storage.
+   - Automatically drops build artifacts (`node_modules`, `vendor`, `dist`, `.venv`, `.git`), files exceeding 250 KB, and enforces an engineering-prioritized 2,500 file budget.
+2. **Automated Architectural Profiling (`RepoProfiler`)**:
+   - Scans root manifests (`package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`) and project `README.md`.
+   - Injects detected programming languages, key dependencies, and project scope summaries dynamically into Tier 2 micro-LLM prompts.
+3. **Decoupled Out-of-Scope Classification**:
+   - Universal heuristics handle non-software domains (weather, cooking, finance, sports).
+   - Domain-specific boundary decisions (e.g., GraphQL on HTTP client vs GraphQL on API server) are resolved dynamically by the micro-LLM using the repository profile.
+4. **Mathematical Distance Gating**:
+   - Enforces a noise floor ($\tau = 0.28$ cosine similarity) on ChromaDB dense retrieval when sparse keyword search yields 0 exact hits, rejecting out-of-scope queries with zero manual keyword maintenance.
+5. **Interactive Ingestion UI**:
+   - Visual 5-step progress bar modal in the frontend (Clone $\rightarrow$ Filter $\rightarrow$ Profile $\rightarrow$ Chunk $\rightarrow$ Index).
+   - Repository switcher allowing users to toggle between ingested repositories or return to the `encode/httpx` baseline.
+
+### 3. Verification & Empirical Scorecard
+- **Test Suite**: Expanded to **46 automated tests** (100% pass across integration, cloner, profiler, and router tests).
+- **Retrieval Recall@5**: Retains **100.0%** across all 8 evaluation queries.
+- **Refusal Accuracy**: **100.0%** on out-of-scope queries with sub-second latency.
+- **Citation Presence**: **100.0%**.
+
+---
+
 *This journal is updated at every ablation stage with reproducible metrics, diffs, and post-mortem analyses.*

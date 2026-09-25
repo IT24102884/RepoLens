@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from ai.core.models import DocumentType
+from ai.ingestion.repo_profiler import RepoProfile
 from ai.routing.router import IntentRouter, QueryIntent, RouteDecision
 
 
@@ -11,13 +12,13 @@ def router():
 
 
 def test_heuristic_out_of_scope(router):
-    test_queries = [
-        "How do I configure a GraphQL subscription with Apollo Federation in HTTPX?",
+    universal_queries = [
         "What is the weather in Tokyo tomorrow?",
         "Give me a recipe for bake a chocolate cake",
         "What is the current bitcoin price?",
+        "Who is the president of the country?",
     ]
-    for q in test_queries:
+    for q in universal_queries:
         decision = router.classify_heuristically(q)
         assert decision is not None
         assert decision.intent == QueryIntent.OUT_OF_SCOPE
@@ -45,6 +46,7 @@ def test_heuristic_code_symbol(router):
         "Where is the URL class defined and how does it parse raw byte paths?",
         "Which file and class defines the codes status HTTPStatus.TOO_MANY_REQUESTS handling?",
         "def _send_handling_redirects implementation in _client.py",
+        "func handleRequest in transport.go",
     ]
     for q in test_queries:
         decision = router.classify_heuristically(q)
@@ -97,6 +99,28 @@ def test_llm_classification_success(router):
     assert decision.target_source_type == DocumentType.DOCUMENTATION
     assert decision.confidence == 0.96
     assert decision.route_source == "llm_classifier"
+
+
+def test_dynamic_profile_injected_in_prompt():
+    profile = RepoProfile(
+        repo_name="graphql-python/graphene",
+        description="GraphQL framework for Python applications.",
+        primary_languages=["python"],
+        subsystems=["core", "types", "docs"],
+        dependencies=["graphql-core"],
+    )
+    custom_router = IntentRouter(api_key="mock_key", repo_profile=profile)
+    mock_groq = MagicMock()
+    mock_choice = MagicMock()
+    mock_choice.message.content = '{"intent": "DOCS_CONCEPTUAL", "confidence": 0.95, "reasoning": "In-scope GraphQL doc"}'
+    mock_groq.chat.completions.create.return_value.choices = [mock_choice]
+    custom_router._groq_client = mock_groq
+
+    res = custom_router.classify_with_llm("How to create a GraphQL Query type?")
+    assert res.intent == QueryIntent.DOCS_CONCEPTUAL
+    called_prompt = mock_groq.chat.completions.create.call_args[1]["messages"][0]["content"]
+    assert "graphql-python/graphene" in called_prompt
+    assert "GraphQL framework" in called_prompt
 
 
 def test_llm_classification_fallback_on_error(router):

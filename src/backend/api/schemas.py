@@ -38,3 +38,27 @@ class RepoStatsResponse(BaseModel):
     vector_store: str
     generator_model: str
     system_status: str
+
+
+class IngestRepoRequest(BaseModel):
+    repo_url: str = Field(..., description="GitHub repository URL, e.g. 'https://github.com/tiangolo/fastapi'")
+    reindex: bool = Field(default=False, description="Whether to force re-cloning and re-indexing")
+
+
+class IngestRepoResponse(BaseModel):
+    status: str
+    repo_name: str
+    repo_slug: str
+    description: str
+    primary_languages: List[str]
+    subsystems: List[str]
+    total_files: int
+    total_chunks: int
+    code_chunks: int
+    doc_chunks: int
+    ticket_chunks: int
+    message: str
+
+
+class SwitchRepoRequest(BaseModel):
+    repo_slug: str = Field(..., description="Repository slug to activate, e.g. 'encode_httpx' or 'default'")

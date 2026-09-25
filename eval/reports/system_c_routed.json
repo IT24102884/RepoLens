@@ -3,10 +3,10 @@
   "summary": {
     "recall": 1.0,
     "keyword_coverage": 0.8541666666666666,
-    "faithfulness": 0.4375,
+    "faithfulness": 0.5625,
     "refusal_accuracy": 0.875,
     "citation_presence": 1.0,
-    "avg_latency_sec": 4.648811749997549
+    "avg_latency_sec": 3.231524887494743
   },
   "details": [
     {
@@ -18,7 +18,7 @@
       "refusal_accuracy": 1.0,
       "citation_presence": 1.0,
       "faithfulness": 0.5,
-      "latency_sec": 1.497342100017704,
+      "latency_sec": 1.5007492000004277,
       "answer": "Based on the provided context, HTTPX supports four different types of timeouts, each raising a specific exception if the time limit is exceeded:\n\n1.  **Connect Timeout**: Specifies the maximum time to wait for a socket connection to be established.\n    *   **Exception Raised**: `ConnectTimeout`\n    *   **Source**: `httpx-0.27.0/docs/advanced/timeouts.md` (L46-L48)\n\n2.  **Read Timeout**: Specifies the maximum duration to wait for a chunk of data to be received (e.g., response body).\n    *   **Exception Raised**: `ReadTimeout`\n    *   **Source**: `httpx-0.27.0/docs/advanced/timeouts.md` (L49-L51)\n\n3.  **Write Timeout**: Specifies the maximum duration to wait for a chunk of data to be sent (e.g., request body).\n    *   **Exception Raised**: `WriteTimeout`\n    *   **Source**: `httpx-0.27.0/docs/advanced/timeouts.md` (L52-L54)\n\n4.  **Pool Timeout**: Specifies the maximum duration to wait for acquiring a connection from the connection pool.\n    *   **Exception Raised**: `PoolTimeout`\n    *   **Source**: `httpx-0.27.0/docs/advanced/timeouts.md` (L55-L58)\n\nAdditionally, the documentation notes that by default, HTTPX raises a generic `TimeoutException` after 5 seconds of network inactivity (`httpx-0.27.0/docs/advanced/timeouts.md`, L3-L4).",
       "retrieved_chunks": [
         {
@@ -92,7 +92,7 @@
         "target_source_type": "DOCUMENTATION",
         "confidence": 0.92,
         "route_source": "heuristic",
-        "reasoning": "Matched documentation guide pattern: \\b(?:different\\s+)?types\\s+of\\s+timeouts\\b",
+        "reasoning": "Matched explicit documentation guide pattern: \\bwhat\\s+are\\s+the\\s+(?:four\\s+|[0-9]+\\s+)?(?:different\\s+)?types\\s+of\\s+timeouts\\b",
         "sub_queries": []
       }
     },
@@ -105,8 +105,8 @@
       "refusal_accuracy": 1.0,
       "citation_presence": 1.0,
       "faithfulness": 0.0,
-      "latency_sec": 1.5441865000175312,
-      "answer": "Based on the provided context, here is the information regarding the `URL` class and its handling of raw byte paths:\n\n**1. Where is the URL class defined?**\nThe provided context does not contain the class definition line (e.g., `class URL:`) for the `URL` class. However, the context provides several properties and methods belonging to this class, located in the file **`httpx-0.27.0/httpx/_urls.py`**. Specifically:\n*   The `raw` property is defined at **L305-L319**.\n*   The `raw_path` property is defined at **L280-L295**.\n*   The `query` property is defined at **L255-L270**.\n*   The `join` method is defined at **L368-L380**.\n\n**2. How does it parse raw byte paths?**\nThe `URL` class does not \"parse\" the raw byte path in the sense of decoding it into a human-readable string within the `raw_path` property. Instead, it constructs the raw byte representation from the internal URI reference components.\n\nAccording to **`httpx-0.27.0/httpx/_urls.py` (L280-L295)**, the `raw_path` property works as follows:\n1.  It retrieves the path from the internal `_uri_reference` object. If the path is empty, it defaults to `\"/\"`.\n2.  It checks if a query string exists in `_uri_reference.query`.\n3.  If a query exists, it appends `\"?\"` followed by the query string to the path.\n4.  Finally, it encodes the resulting string into ASCII bytes using `path.encode(\"ascii\")`.\n\nThe actual parsing and normalization of the path string (including percent-encoding) occurs earlier in the process within the `urlparse` function in **`httpx-0.27.0/httpx/_urlparse.py` (L151-L283)**. Specifically, at **L268**, the path is processed using `quote(path, safe=SUB_DELIMS + \":/[]@\")` to ensure it is a valid, percent-encoded ASCII string before being stored in the `ParseResult` object, which the `URL` class then utilizes.\n\nIn summary, the `URL` class's `raw_path` property returns the path and query string as raw ASCII bytes, constructed from the already-parsed and normalized components stored in the internal `_uri_reference`.",
+      "latency_sec": 1.633737399999518,
+      "answer": "Based on the provided context, here is the information regarding the `URL` class and its handling of raw byte paths:\n\n**1. Where is the URL class defined?**\nThe provided context does not explicitly show the class definition line (e.g., `class URL:`). However, the context contains multiple properties and methods belonging to this class located in the file **`httpx-0.27.0/httpx/_urls.py`**. Specifically:\n*   The `raw` property is defined at **L305-L319**.\n*   The `raw_path` property is defined at **L280-L295**.\n*   The `query` property is defined at **L255-L270**.\n*   The `join` method is defined at **L368-L380**.\n\n**2. How does it parse raw byte paths?**\nThe `URL` class does not \"parse\" raw byte paths in the sense of decoding them into human-readable strings within the `raw_path` property. Instead, it constructs the raw byte representation from the internal URI reference components.\n\nAccording to **`httpx-0.27.0/httpx/_urls.py` (L280-L295)**, the `raw_path` property works as follows:\n1.  It retrieves the path from `self._uri_reference.path`. If the path is empty or `None`, it defaults to `\"/\"`.\n2.  It checks if `self._uri_reference.query` is not `None`. If a query exists, it appends `\"?\"` followed by the query string to the path.\n3.  It encodes the resulting string into ASCII bytes using `path.encode(\"ascii\")`.\n\nThe actual parsing and normalization of the URL components (including the path) into a canonical form occurs earlier in the pipeline within the `urlparse` function in **`httpx-0.27.0/httpx/_urlparse.py` (L151-L283)**. Specifically:\n*   The `urlparse` function takes a URL string and optional keyword arguments.\n*   It validates the URL against `URL_REGEX` and `AUTHORITY_REGEX`.\n*   It normalizes the path component using `validate_path` and `normalize_path` (L236-L240).\n*   It percent-encodes the path using `quote(path, safe=SUB_DELIMS + \":/[]@\")` (L253).\n*   This parsed and normalized path is then stored in the `ParseResult` object, which is likely used to initialize the `URL` object's internal `_uri_reference`.\n\nIn summary, the `URL` class's `raw_path` property **constructs** the raw bytes by combining the normalized path and query string from its internal state and encoding them to ASCII, rather than parsing raw bytes directly. The initial parsing and normalization happen in `httpx/_urlparse.py`.",
       "retrieved_chunks": [
         {
           "id": "3c1e8fa9f823bd0e",
@@ -206,8 +206,8 @@
       "refusal_accuracy": 1.0,
       "citation_presence": 1.0,
       "faithfulness": 1.0,
-      "latency_sec": 9.726656599959824,
-      "answer": "According to Issue #1240, `AsyncClient` hangs when calling `client.stream` without an `async with` context manager (or explicit closing) because the underlying connection is not released back to the connection pool. This causes the connection pool to exhaust, leading subsequent requests to hang indefinitely.\n\n**Source:** `issues/1240` (L1-L5)",
+      "latency_sec": 0.9832358999992721,
+      "answer": "According to **Issue #1240** (`issues/1240`, L1-L5), `AsyncClient` hangs when calling `client.stream('GET', url)` without using an `async with` context manager or explicitly closing the response because the **connection pool exhausts**, causing subsequent requests to hang.\n\nThis is further clarified in the discussion on Issue #1240 (`issues/1240#comments-1-2`, L1-L7), where @florimondmanca states that streaming responses **must always be used as context managers or explicitly read** to release the underlying connection back to the pool.",
       "retrieved_chunks": [
         {
           "id": "c595ad81de00169a",
@@ -299,8 +299,8 @@
       "refusal_accuracy": 1.0,
       "citation_presence": 1.0,
       "faithfulness": 0.0,
-      "latency_sec": 0.7988936000037938,
-      "answer": "The `TOO_MANY_REQUESTS` status code is defined in the file `httpx-0.27.0/httpx/_status_codes.py` within the class `codes`.\n\nSpecifically, it is defined at line 143:\n`TOO_MANY_REQUESTS = 429, \"Too Many Requests\"`\n\nSource: `httpx-0.27.0/httpx/_status_codes.py` (L143)",
+      "latency_sec": 0.987291399971582,
+      "answer": "The `TOO_MANY_REQUESTS` status code is defined in the file `httpx-0.27.0/httpx/_status_codes.py` within the class `codes`.\n\nSpecifically, it is defined at line 143 as:\n`TOO_MANY_REQUESTS = 429, \"Too Many Requests\"`\n\nReference:\n- File: `httpx-0.27.0/httpx/_status_codes.py`\n- Class: `codes` (defined at line 6)\n- Line: 143",
       "retrieved_chunks": [
         {
           "id": "a28fee189b9ebe48",
@@ -389,15 +389,15 @@
       "refusal_accuracy": 1.0,
       "citation_presence": 1.0,
       "faithfulness": 0.0,
-      "latency_sec": 9.450002107769251e-05,
+      "latency_sec": 0.8855127000133507,
       "answer": "I am an engineering assistant specialized exclusively in the encode/httpx repository. The question 'How do I configure a GraphQL subscription with Apollo Federation in HTTPX?' is outside the scope of this repository (no relevant documentation, source code, or issue tickets found). Therefore, I cannot provide an answer based on this codebase.",
       "retrieved_chunks": [],
       "routing_decision": {
         "intent": "OUT_OF_SCOPE",
         "target_source_type": null,
-        "confidence": 0.98,
-        "route_source": "heuristic",
-        "reasoning": "Matched out-of-scope pattern: \\b(?:graphql|apollo(?:\\s+federation)?|schema\\s+stitching)\\b",
+        "confidence": 0.95,
+        "route_source": "llm_classifier",
+        "reasoning": "HTTPX is a low-level HTTP client library. It does not provide built-in support for GraphQL, Apollo Federation, or subscription protocols (which typically require WebSockets or specific GraphQL client libraries). Configuring such a high-level application protocol is outside the scope of the HTTPX repository's domain.",
         "sub_queries": []
       }
     },
@@ -410,8 +410,8 @@
       "refusal_accuracy": 0.0,
       "citation_presence": 1.0,
       "faithfulness": 1.0,
-      "latency_sec": 5.178330699971411,
-      "answer": "Based on the provided context, I cannot find the specific implementation of the `Client.request` method that shows how it passes headers and cookies down to the underlying transport dispatch.\n\nThe provided sources include:\n*   `httpx/_client.py` (L1095-L1122): Definition of `Client.head`, which calls `self.request`.\n*   `httpx/_client.py` (L964-L999): Definition of `Client._send_handling_redirects`, which calls `self._send_single_request`.\n*   `httpx/_client.py` (L1037-L1064): Definition of `Client.get`, which calls `self.request`.\n*   `httpx/_transports/default.py` (L121): Class definition for `HTTPTransport`.\n*   `httpx/_transports/base.py` (L24-L57): Definition of `BaseTransport.handle_request`.\n\nWhile `Client.head` and `Client.get` accept `headers` and `cookies` parameters and pass them to `self.request` (as seen in Source 1 and Source 3), the actual body of the `Client.request` method\u2014which would show how these parameters are processed and passed to the transport (likely via `Client._send_single_request` or directly to `transport.handle_request`)\u2014is not included in the provided context. Therefore, I cannot describe the exact mechanism of how headers and cookies are dispatched to the transport layer based solely on the verified context.",
+      "latency_sec": 1.5438360999687575,
+      "answer": "Based on the provided context, I cannot find the specific implementation of the `Client.request` method that shows how it passes headers and cookies down to the underlying transport dispatch.\n\nThe provided sources include:\n1.  `Client.head` and `Client.get` methods (`httpx-0.27.0/httpx/_client.py` L1095-L1122 and L1037-L1064), which call `self.request` but do not show the internal logic of `request`.\n2.  `Client._send_handling_redirects` (`httpx-0.27.0/httpx/_client.py` L964-L999), which calls `self._send_single_request` but does not show how headers/cookies are handled in that chain.\n3.  `HTTPTransport` class definition (`httpx-0.27.0/httpx/_transports/default.py` L121) and `BaseTransport.handle_request` (`httpx-0.27.0/httpx/_transports/base.py` L24-L57), which define the transport interface but do not show the client-side dispatch logic.\n\nThe context does not contain the source code for `Client.request` or `Client._send_single_request` where the merging of client-level headers/cookies with request-level headers/cookies and the subsequent call to the transport would occur.",
       "retrieved_chunks": [
         {
           "id": "06e352bb74a65863",
@@ -512,9 +512,9 @@
       "keyword_coverage": 1.0,
       "refusal_accuracy": 1.0,
       "citation_presence": 1.0,
-      "faithfulness": 0.0,
-      "latency_sec": 17.77514310000697,
-      "answer": "To configure custom SSL certificates or disable SSL verification in an HTTPX client, you should pass the SSL settings when instantiating the `httpx.Client` (or `httpx.AsyncClient`) instance. You cannot change these settings on a per-request basis using methods like `client.get()`.\n\nHere are the specific methods based on the documentation:\n\n**1. Using a Custom CA Bundle (Verification)**\nYou can specify a custom Certificate Authority (CA) bundle by passing a file path to the `verify` parameter.\n*   **File Path:**\n    ```python\n    import httpx\n    client = httpx.Client(verify=\"path/to/client.pem\")\n    ```\n    *(Source: `httpx-0.27.0/docs/advanced/ssl.md`, L10-L12)*\n\n*   **SSLContext Object:**\n    You can also pass a standard library `ssl.SSLContext` or use the helper `httpx.create_ssl_context()`.\n    ```python\n    import ssl\n    import httpx\n\n    context = ssl.create_default_context()\n    context.load_verify_locations(cafile=\"/tmp/client.pem\")\n    client = httpx.Client(verify=context)\n    ```\n    *(Source: `httpx-0.27.0/docs/advanced/ssl.md`, L15-L21)*\n\n**2. Disabling SSL Verification**\nYou can disable verification entirely by setting `verify=False`. Note that the documentation explicitly states this is **not recommended**.\n```python\nimport httpx\nclient = httpx.Client(verify=False)\n```\n*(Source: `httpx-0.27.0/docs/advanced/ssl.md`, L38-L40, L55-L56)*\n\n**3. Using Client-Side Certificates**\nIf you need to present a client-side certificate, use the `cert` parameter. This accepts:\n*   A path to a certificate file.\n*   A two-tuple of `(certificate_file, key_file)`.\n*   A three-tuple of `(certificate_file, key_file, password)`.\n\n```python\n# Example with certificate and key\ncert = (\"path/to/client.pem\", \"path/to/client.key\")\nclient = httpx.Client(cert=cert)\n```\n*(Source: `httpx-0.27.0/docs/advanced/ssl.md`, L61-L86)*\n\n**Important Note:**\nIf you require different SSL settings for different requests, you must create multiple `Client` instances, each with its own specific SSL configuration, as each client maintains an isolated connection pool with fixed SSL settings.\n*(Source: `httpx-0.27.0/docs/advanced/ssl.md`, L51-L60)*",
+      "faithfulness": 1.0,
+      "latency_sec": 17.202158300031442,
+      "answer": "To configure custom SSL certificates or disable SSL verification in an HTTPX client, you should pass the SSL settings when instantiating the `httpx.Client` (or `httpx.AsyncClient`) instance. You cannot change these settings on a per-request basis using methods like `client.get()`.\n\nHere are the specific methods based on the documentation:\n\n**1. Using a Custom CA Bundle (Verification)**\nYou can specify a custom Certificate Authority (CA) bundle using the `verify` parameter. This can be a path to a PEM file or an `ssl.SSLContext` object.\n\n*   **Using a file path:**\n    ```python\n    import httpx\n\n    client = httpx.Client(verify=\"path/to/client.pem\")\n    # Or for a single request:\n    # r = httpx.get(\"https://example.org\", verify=\"path/to/client.pem\")\n    ```\n    *(Source: httpx-0.27.0/docs/advanced/ssl.md, L10-L12)*\n\n*   **Using an `ssl.SSLContext`:**\n    ```python\n    import ssl\n    import httpx\n\n    context = ssl.create_default_context()\n    context.load_verify_locations(cafile=\"/tmp/client.pem\")\n    client = httpx.Client(verify=context)\n    ```\n    *(Source: httpx-0.27.0/docs/advanced/ssl.md, L15-L20)*\n\n*   **Using the helper function `httpx.create_ssl_context`:**\n    ```python\n    import httpx\n\n    context = httpx.create_ssl_context(verify=\"/tmp/client.pem\")\n    client = httpx.Client(verify=context)\n    ```\n    *(Source: httpx-0.27.0/docs/advanced/ssl.md, L28-L33)*\n\n**2. Disabling SSL Verification**\nYou can disable verification entirely by setting `verify=False`. Note that the documentation explicitly states this is **not recommended**.\n\n```python\nimport httpx\n\nclient = httpx.Client(verify=False)\n```\n*(Source: httpx-0.27.0/docs/advanced/ssl.md, L38-L40, L54-L56)*\n\n**3. Using Client-Side Certificates**\nIf you need to present a client-side certificate, use the `cert` parameter. This accepts a path to a certificate file, a tuple of `(certificate_file, key_file)`, or a tuple of `(certificate_file, key_file, password)`.\n\n```python\nimport httpx\n\n# Option A: Single file\ncert = \"path/to/client.pem\"\nclient = httpx.Client(cert=cert)\n\n# Option B: Certificate and Key\ncert = (\"path/to/client.pem\", \"path/to/client.key\")\nclient = httpx.Client(cert=cert)\n\n# Option C: Certificate, Key, and Password\ncert = (\"path/to/client.pem\", \"path/to/client.key\", \"password\")\nclient = httpx.Client(cert=cert)\n```\n*(Source: httpx-0.27.0/docs/advanced/ssl.md, L63-L85)*\n\n**Important Note:**\nIf you require different SSL configurations for different requests, you must create multiple `Client` instances, each with its own specific SSL settings, as each client maintains an isolated connection pool with a fixed SSL configuration.\n*(Source: httpx-0.27.0/docs/advanced/ssl.md, L57-L60)*",
       "retrieved_chunks": [
         {
           "id": "68eb96b3a4dec47d",
@@ -587,7 +587,7 @@
         "target_source_type": "DOCUMENTATION",
         "confidence": 0.92,
         "route_source": "heuristic",
-        "reasoning": "Matched documentation guide pattern: \\bhow\\s+(?:do\\s+i|to)\\s+configure\\b",
+        "reasoning": "Matched explicit documentation guide pattern: \\b(?:how\\s+do\\s+i|how\\s+to)\\s+configure\\s+(?:custom\\s+ssl|ssl|timeouts?|proxy|proxies|auth|authentication|client|transport)\\b",
         "sub_queries": []
       }
     },
@@ -600,8 +600,8 @@
       "refusal_accuracy": 1.0,
       "citation_presence": 1.0,
       "faithfulness": 1.0,
-      "latency_sec": 0.6698468999820761,
-      "answer": "The HTTP/2 keepalive connection drop issue in ticket #1405 was fixed by adding support for `httpcore.AsyncConnectionPool(keepalive_expiry=5.0)`, which allows for the safe recycling of idle HTTP/2 connections. This solution is documented in the discussion comments for Issue #1405 (Source 2, L3).",
+      "latency_sec": 1.115678099973593,
+      "answer": "The HTTP/2 keepalive connection drop issue in ticket #1405 was fixed by adding support for `httpcore.AsyncConnectionPool(keepalive_expiry=5.0)`, which allows for the safe recycling of idle HTTP/2 connections.\n\nThis solution is documented in the discussion for Issue #1405, specifically in the comment by @tomchristie found in `issues/1405#comments-1-1` (L3).",
       "retrieved_chunks": [
         {
           "id": "4097a66e88bb89f2",

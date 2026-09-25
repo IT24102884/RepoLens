@@ -48,10 +48,20 @@
       <span class="pill-count" id="headerTotalChunks">1,636 chunks</span>
     </div>
 
-    <!-- System Status -->
-    <div class="header-status">
-      <span class="status-indicator"></span>
-      <span class="status-text">Groq & Chroma + BM25 Online</span>
+    <!-- Header Right: Load Repo & Status -->
+    <div class="header-right">
+      <button type="button" class="btn-ingest-repo" onclick="openIngestModal()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        <span>Load Repo</span>
+      </button>
+      <div class="header-status">
+        <span class="status-indicator"></span>
+        <span class="status-text">Groq & Chroma + BM25 Online</span>
+      </div>
     </div>
   </header>
 
@@ -241,6 +251,110 @@
 
     </main>
 
+  </div>
+
+  <!-- MODAL: DYNAMIC REPO INGESTION -->
+  <div id="ingestModal" class="modal-overlay" style="display: none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title-row">
+          <div class="modal-icon-box">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+            </svg>
+          </div>
+          <div>
+            <h3 class="modal-title">Ingest Any GitHub Repository</h3>
+            <p class="modal-subtitle">Auto-profiles tech stack, chunks polyglot ASTs, and builds local vector & BM25 indices.</p>
+          </div>
+        </div>
+        <button type="button" class="modal-close" onclick="closeIngestModal()">×</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Switch Existing Repo -->
+        <div class="repo-switch-box" id="repoSwitchBox">
+          <label class="input-label">Active / Previously Ingested Repositories:</label>
+          <div class="repo-select-row">
+            <select id="repoSelect" class="form-select">
+              <option value="encode_httpx">encode/httpx (Benchmark Baseline)</option>
+            </select>
+            <button type="button" class="btn-secondary" onclick="switchSelectedRepo()">Switch</button>
+          </div>
+        </div>
+
+        <div class="divider-text"><span>OR CLONE NEW</span></div>
+
+        <!-- URL Input -->
+        <div class="input-group-row">
+          <div class="input-field-wrapper">
+            <input 
+              type="text" 
+              id="repoUrlInput" 
+              placeholder="https://github.com/tiangolo/fastapi or owner/repo" 
+              class="form-input" 
+            />
+          </div>
+          <button type="button" id="startIngestBtn" class="btn-primary" onclick="startRepoIngestion()">
+            <span>Clone & Index</span>
+          </button>
+        </div>
+        <p class="input-helper">Zero-waste filter automatically discards tests, dependencies, and minified bundles.</p>
+
+        <!-- Progress Pipeline Visualizer -->
+        <div id="ingestProgressSection" class="ingest-progress-box" style="display: none;">
+          <div class="progress-bar-wrapper">
+            <div id="ingestProgressBar" class="progress-bar-fill" style="width: 0%;"></div>
+          </div>
+          <div class="progress-status-row">
+            <span id="progressStepTitle" class="progress-title">Starting ingestion...</span>
+            <span id="progressPercent" class="progress-percent">0%</span>
+          </div>
+
+          <div class="pipeline-steps">
+            <div class="step-item" id="stepClone">
+              <span class="step-dot">1</span>
+              <span class="step-label">Shallow Clone</span>
+            </div>
+            <div class="step-item" id="stepFilter">
+              <span class="step-dot">2</span>
+              <span class="step-label">File Filter</span>
+            </div>
+            <div class="step-item" id="stepProfile">
+              <span class="step-dot">3</span>
+              <span class="step-label">Stack Profiling</span>
+            </div>
+            <div class="step-item" id="stepChunk">
+              <span class="step-dot">4</span>
+              <span class="step-label">AST Chunking</span>
+            </div>
+            <div class="step-item" id="stepIndex">
+              <span class="step-dot">5</span>
+              <span class="step-label">ChromaDB + BM25</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ingest Result Summary -->
+        <div id="ingestResultSummary" class="ingest-result-card" style="display: none;">
+          <div class="result-badge-row">
+            <span class="badge-success">Ready for Querying</span>
+            <span class="result-repo-name" id="resRepoName">owner/repo</span>
+          </div>
+          <p class="result-desc" id="resRepoDesc"></p>
+          <div class="result-meta-grid">
+            <div><strong>Languages:</strong> <span id="resLanguages">-</span></div>
+            <div><strong>Subsystems:</strong> <span id="resSubsystems">-</span></div>
+            <div><strong>Indexed Chunks:</strong> <span id="resChunks">0</span></div>
+            <div><strong>Distance Gating:</strong> <span>Active (&ge; 0.28)</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-cancel" onclick="closeIngestModal()">Close</button>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>

@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from groq import Groq
 
 from ai.core.models import DocumentChunk, DocumentType
+from ai.ingestion.repo_profiler import DEFAULT_HTTPX_PROFILE, RepoProfile
 from ai.retrieval.hybrid_retriever import HybridRetriever
 from ai.routing.router import IntentRouter, QueryIntent, RouteDecision
 
@@ -34,11 +35,14 @@ class RoutedRAG:
         model_name: str = "qwen/qwen3.8-27b",
         top_k: int = 5,
         rrf_k: int = 60,
+        repo_profile: Optional[RepoProfile] = None,
+        retriever: Optional[HybridRetriever] = None,
     ):
         self.model_name = model_name
         self.top_k = top_k
-        self.router = IntentRouter(model_name=model_name)
-        self.retriever = HybridRetriever(rrf_k=rrf_k)
+        self.repo_profile = repo_profile or DEFAULT_HTTPX_PROFILE
+        self.router = IntentRouter(model_name=model_name, repo_profile=self.repo_profile)
+        self.retriever = retriever or HybridRetriever(rrf_k=rrf_k)
 
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:

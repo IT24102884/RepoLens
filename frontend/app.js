@@ -51,12 +51,14 @@ async function loadRepoStats() {
     const codeEl = document.getElementById("statCodeChunks");
     const docEl = document.getElementById("statDocChunks");
     const ticketEl = document.getElementById("statTicketChunks");
+    const queryInput = document.getElementById("queryInput");
 
     if (nameEl) nameEl.textContent = `${data.repo_name} (${data.repo_version})`;
     if (chunksEl) chunksEl.textContent = `${data.total_chunks.toLocaleString()} chunks`;
     if (codeEl) codeEl.textContent = data.code_chunks.toLocaleString();
     if (docEl) docEl.textContent = data.doc_chunks.toLocaleString();
     if (ticketEl) ticketEl.textContent = data.ticket_chunks.toLocaleString();
+    if (queryInput) queryInput.placeholder = `Ask an engineering question about ${data.repo_name}...`;
   } catch (err) {
     console.warn("Could not fetch repo stats:", err);
   }
@@ -274,3 +276,200 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+
+// ==========================================
+// Dynamic Repository Ingestion & Switcher
+// ==========================================
+
+async function openIngestModal() {
+  const modal = document.getElementById("ingestModal");
+  if (!modal) return;
+  modal.style.display = "flex";
+  await populateRepoDropdown();
+}
+
+function closeIngestModal() {
+  const modal = document.getElementById("ingestModal");
+  if (!modal) return;
+  modal.style.display = "none";
+}
+
+async function populateRepoDropdown() {
+  try {
+    const res = await fetch("/api/repos");
+    if (!res.ok) return;
+    const data = await res.json();
+    const select = document.getElementById("repoSelect");
+    if (!select || !data.repos) return;
+
+    select.innerHTML = "";
+    data.repos.forEach((repo) => {
+      const opt = document.createElement("option");
+      opt.value = repo.slug;
+      opt.textContent = `${repo.name}${repo.active ? " (Active)" : ""}`;
+      if (repo.active) opt.selected = true;
+      select.appendChild(opt);
+    });
+  } catch (err) {
+    console.warn("Could not load repository list:", err);
+  }
+}
+
+async function switchSelectedRepo() {
+  const select = document.getElementById("repoSelect");
+  if (!select) return;
+  const slug = select.value;
+  try {
+    const res = await fetch("/api/repo/switch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repo_slug: slug }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      alert(`Switch failed: ${err.detail || "Unknown error"}`);
+      return;
+    }
+    const data = await res.json();
+    await loadRepoStats();
+    appendSystemNotice(`Active repository switched to <strong>${data.active_repo}</strong>.`);
+    closeIngestModal();
+  } catch (err) {
+    alert(`Switch error: ${err.message}`);
+  }
+}
+
+async function startRepoIngestion() {
+  const urlInput = document.getElementById("repoUrlInput");
+  const btn = document.getElementById("startIngestBtn");
+  const progressSec = document.getElementById("ingestProgressSection");
+  const progressBar = document.getElementById("ingestProgressBar");
+  const stepTitle = document.getElementById("progressStepTitle");
+  const percentEl = document.getElementById("progressPercent");
+  const resultCard = document.getElementById("ingestResultSummary");
+
+  const repoUrl = urlInput.value.trim();
+  if (!repoUrl) {
+    alert("Please enter a valid GitHub repository URL (e.g. 'https://github.com/tiangolo/fastapi').");
+    urlInput.focus();
+    return;
+  }
+
+  // Reset UI
+  btn.disabled = true;
+  resultCard.style.display = "none";
+  progressSec.style.display = "block";
+  progressBar.style.background = "linear-gradient(90deg, #3b82f6, #a855f7)";
+  progressBar.style.width = "5%";
+  stepTitle.textContent = "Connecting to GitHub...";
+  percentEl.textContent = "5%";
+
+  const steps = [
+    document.getElementById("stepClone"),
+    document.getElementById("stepFilter"),
+    document.getElementById("stepProfile"),
+    document.getElementById("stepChunk"),
+    document.getElementById("stepIndex"),
+  ];
+
+  function setStep(idx, text, pct) {
+    progressBar.style.width = `${pct}%`;
+    percentEl.textContent = `${pct}%`;
+    stepTitle.textContent = text;
+    steps.forEach((s, i) => {
+      if (!s) return;
+      s.classList.remove("active", "completed");
+      if (i < idx) s.classList.add("completed");
+      else if (i === idx) s.classList.add("active");
+    });
+  }
+
+  // Animate progress states
+  setStep(0, "Executing shallow clone (git clone --depth 1)...", 15);
+
+  const t1 = setTimeout(() => setStep(1, "Applying zero-waste file filters (discarding .venv, node_modules, files > 250KB)...", 35), 1200);
+  const t2 = setTimeout(() => setStep(2, "Inspecting manifests (package.json, pyproject.toml, go.mod) & README...", 55), 2500);
+  const t3 = setTimeout(() => setStep(3, "Parsing syntax trees & extracting AST-aware chunks...", 75), 4500);
+  const t4 = setTimeout(() => setStep(4, "Generating local ONNX embeddings in ChromaDB & indexing BM25 tokens...", 88), 7000);
+
+  try {
+    const res = await fetch("/api/repo/ingest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repo_url: repoUrl }),
+    });
+
+    clearTimeout(t1);
+    clearTimeout(t2);
+    clearTimeout(t3);
+    clearTimeout(t4);
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Ingestion request failed");
+    }
+
+    const data = await res.json();
+
+    // Mark 100% complete
+    progressBar.style.width = "100%";
+    percentEl.textContent = "100%";
+    stepTitle.textContent = "Ingestion & indexing complete!";
+    steps.forEach((s) => {
+      if (s) {
+        s.classList.remove("active");
+        s.classList.add("completed");
+      }
+    });
+
+    // Populate result card
+    document.getElementById("resRepoName").textContent = data.repo_name;
+    document.getElementById("resRepoDesc").textContent = data.description;
+    document.getElementById("resLanguages").textContent = (data.primary_languages || []).join(", ") || "General";
+    document.getElementById("resSubsystems").textContent = (data.subsystems || []).join(", ") || "Default";
+    document.getElementById("resChunks").textContent = `${data.total_chunks.toLocaleString()} chunks (${data.code_chunks} code, ${data.doc_chunks} docs)`;
+    resultCard.style.display = "block";
+
+    // Refresh UI telemetry and repolist
+    await loadRepoStats();
+    await populateRepoDropdown();
+
+    appendSystemNotice(
+      `Successfully ingested and indexed <strong>${data.repo_name}</strong> (${data.total_chunks} chunks). System C is now ready to answer queries!`
+    );
+  } catch (err) {
+    clearTimeout(t1);
+    clearTimeout(t2);
+    clearTimeout(t3);
+    clearTimeout(t4);
+    progressBar.style.background = "#f43f5e";
+    stepTitle.textContent = `Error: ${err.message}`;
+    stepTitle.style.color = "#f43f5e";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function appendSystemNotice(htmlContent) {
+  const chatMessages = document.getElementById("chatMessages");
+  const welcomeHero = document.getElementById("welcomeHero");
+  if (welcomeHero) welcomeHero.style.display = "none";
+
+  const div = document.createElement("div");
+  div.className = "ai-msg-row";
+  div.innerHTML = `
+    <div class="ai-bubble" style="border-color: rgba(168, 85, 247, 0.4); background-color: rgba(168, 85, 247, 0.08); color: #e9d5ff;">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+        <div>${htmlContent}</div>
+      </div>
+    </div>
+  `;
+  chatMessages.appendChild(div);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
