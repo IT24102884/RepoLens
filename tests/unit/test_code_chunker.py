@@ -63,3 +63,65 @@ def test_ast_code_chunker_handles_syntax_error():
 
     assert len(chunks) == 1
     assert chunks[0].metadata.get("fallback") is True
+
+
+def test_treesitter_typescript_chunking():
+    ts_code = """interface User {
+    id: number;
+    name: string;
+}
+
+export function getUser(id: number): User {
+    return { id: id, name: "Alice" };
+}
+
+class UserService {
+    private users: User[] = [];
+}
+"""
+    chunker = ASTCodeChunker()
+    chunks = chunker.chunk(content=ts_code, file_path="services/user.ts")
+
+    assert len(chunks) == 3
+    names = [c.metadata.get("symbol_name") for c in chunks]
+    assert "User" in names
+    assert "getUser" in names
+    assert "UserService" in names
+    assert chunks[0].metadata["language"] == "typescript"
+    assert chunks[1].start_line == 6
+
+
+def test_treesitter_go_chunking():
+    go_code = """package main
+
+type Config struct {
+    Port int
+}
+
+func StartServer(cfg Config) error {
+    return nil
+}
+"""
+    chunker = ASTCodeChunker()
+    chunks = chunker.chunk(content=go_code, file_path="server.go")
+
+    assert len(chunks) == 2
+    names = [c.metadata.get("symbol_name") for c in chunks]
+    assert "Config" in names
+    assert "StartServer" in names
+    assert chunks[0].metadata["language"] == "go"
+
+
+def test_treesitter_java_chunking():
+    java_code = """public class Calculator {
+    public int add(int a, int b) {
+        return a + b;
+    }
+}
+"""
+    chunker = ASTCodeChunker()
+    chunks = chunker.chunk(content=java_code, file_path="Calculator.java")
+
+    assert len(chunks) >= 1
+    assert chunks[0].metadata["language"] == "java"
+    assert chunks[0].metadata["symbol_name"] == "Calculator"

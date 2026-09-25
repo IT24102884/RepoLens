@@ -33,7 +33,7 @@ class IngestionPipeline:
 
         # Route by extension
         ext = file_path.suffix.lower()
-        if ext == ".py":
+        if ext in {".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java"}:
             return self.code_chunker.chunk(content, relative_path)
         elif ext in {".md", ".markdown", ".rst"}:
             return self.doc_chunker.chunk(content, relative_path)

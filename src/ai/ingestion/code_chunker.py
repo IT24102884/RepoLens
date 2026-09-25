@@ -1,23 +1,40 @@
 import ast
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from ai.core.models import DocumentChunk, DocumentType
 from ai.ingestion.base import BaseChunker
 
+# Tree-sitter universal language parsers (loaded dynamically on demand)
+try:
+    from tree_sitter import Language, Parser
+    HAS_TREE_SITTER = True
+except ImportError:
+    HAS_TREE_SITTER = False
+
 
 class ASTCodeChunker(BaseChunker):
-    """AST-aware chunker for Python code files."""
+    """Universal AST-aware chunker supporting Python, TypeScript, JavaScript, Go, Rust, and Java."""
 
     def __init__(self, min_chunk_lines: int = 3):
         self.min_chunk_lines = min_chunk_lines
 
     def chunk(self, content: str, file_path: str, **kwargs) -> List[DocumentChunk]:
-        """Parse Python code using AST and extract classes and functions as atomic chunks."""
+        """Parse code using Tree-sitter (polyglot) or Python AST into atomic chunks."""
         chunks: List[DocumentChunk] = []
         lines = content.splitlines()
 
         if not content.strip():
             return chunks
 
+        ext = Path(file_path).suffix.lower()
+
+        # If it's a non-Python code file (TypeScript, JavaScript, Go, Rust, Java), route to Tree-sitter
+        if ext != ".py" and HAS_TREE_SITTER:
+            ts_chunks = self._chunk_with_treesitter(content, file_path, ext)
+            if ts_chunks:
+                return ts_chunks
+
+        # Python files (.py) continue using our specialized Python AST parser
         try:
             tree = ast.parse(content, filename=file_path)
         except SyntaxError:
@@ -172,3 +189,122 @@ class ASTCodeChunker(BaseChunker):
             content=func_content,
             metadata=metadata,
         )
+
+    def _get_parser_for_extension(self, ext: str) -> Optional[tuple]:
+        """Dynamically load only the language parser needed for this file."""
+        try:
+            if ext == ".py":
+                import tree_sitter_python as tspython
+                return "python", Parser(Language(tspython.language()))
+
+            elif ext in {".ts", ".tsx"}:
+                import tree_sitter_typescript as tstypescript
+                lang_fn = tstypescript.language_tsx if ext == ".tsx" else tstypescript.language_typescript
+                return "typescript", Parser(Language(lang_fn()))
+
+            elif ext in {".js", ".jsx"}:
+                import tree_sitter_javascript as tsjavascript
+                return "javascript", Parser(Language(tsjavascript.language()))
+
+            elif ext == ".go":
+                import tree_sitter_go as tsgo
+                return "go", Parser(Language(tsgo.language()))
+
+            elif ext == ".rs":
+                import tree_sitter_rust as tsrust
+                return "rust", Parser(Language(tsrust.language()))
+
+            elif ext == ".java":
+                import tree_sitter_java as tsjava
+                return "java", Parser(Language(tsjava.language()))
+
+        except Exception:
+            return None
+        return None
+
+    def _chunk_with_treesitter(
+        self, content: str, file_path: str, ext: str
+    ) -> List[DocumentChunk]:
+        """Universal AST parser for TypeScript, JavaScript, Go, Rust, Java, Python."""
+        parser_info = self._get_parser_for_extension(ext)
+        if not parser_info:
+            return []
+
+        lang_name, parser = parser_info
+        try:
+            tree = parser.parse(content.encode("utf-8"))
+        except Exception:
+            return []
+
+        lines = content.splitlines()
+        chunks: List[DocumentChunk] = []
+
+        # Target declaration node types across languages
+        target_types = {
+            # Python
+            "function_definition", "class_definition",
+            # TypeScript / JavaScript
+            "function_declaration", "class_declaration", "interface_declaration",
+            "type_alias_declaration", "export_statement", "lexical_declaration",
+            # Go
+            "function_declaration", "method_declaration", "type_declaration",
+            # Rust
+            "function_item", "struct_item", "enum_item", "impl_item", "trait_item",
+            # Java
+            "class_declaration", "interface_declaration", "method_declaration",
+        }
+
+        for child in tree.root_node.children:
+            node_to_check = child
+
+            # If wrapped in an export statement (e.g. `export function ...` in TS/JS), unpack it
+            if child.type == "export_statement" and child.children:
+                for c in child.children:
+                    if c.type in target_types:
+                        node_to_check = c
+                        break
+
+            if node_to_check.type in target_types:
+                s_line = node_to_check.start_point.row + 1
+                e_line = node_to_check.end_point.row + 1
+
+                # Extract identifier name using Tree-sitter's standard 'name' field
+                name_node = node_to_check.child_by_field_name("name")
+                if not name_node and node_to_check.children:
+                    for ch in node_to_check.children:
+                        if ch.child_by_field_name("name"):
+                            name_node = ch.child_by_field_name("name")
+                            break
+                symbol_name = name_node.text.decode("utf-8") if name_node else "anonymous"
+
+                chunk_content = "\n".join(lines[s_line - 1 : e_line])
+                if chunk_content.strip():
+                    chunks.append(
+                        DocumentChunk.create(
+                            source_type=DocumentType.CODE,
+                            file_path=file_path,
+                            start_line=s_line,
+                            end_line=e_line,
+                            content=chunk_content,
+                            metadata={
+                                "language": lang_name,
+                                "symbol_name": symbol_name,
+                                "symbol_type": node_to_check.type,
+                            },
+                        )
+                    )
+
+        # Fallback if no specific top-level symbols matched: chunk whole file
+        if not chunks and lines:
+            chunks.append(
+                DocumentChunk.create(
+                    source_type=DocumentType.CODE,
+                    file_path=file_path,
+                    start_line=1,
+                    end_line=len(lines),
+                    content=content,
+                    metadata={"language": lang_name, "fallback": True},
+                )
+            )
+
+        return chunks
