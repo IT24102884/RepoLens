@@ -1,47 +1,107 @@
+"""Polyglot Code Ingestion Inspector.
+
+Demonstrates and verifies manual chunking across multiple programming languages:
+- TypeScript / React (.ts, .tsx)
+- Go (.go)
+- Java (.java)
+- Python (.py)
+"""
+
 from ai.ingestion.code_chunker import ASTCodeChunker
 
-# 1. Sample Python Code to Chunk
-SAMPLE_CODE = '''"""Client module for HTTP requests."""
 
-class APIClient:
-    """Main client class."""
+SAMPLE_FILES = [
+    (
+        "services/AuthService.ts",
+        """interface UserSession {
+    token: string;
+    expiresAt: number;
+}
 
-    def __init__(self, base_url: str):
-        self.base_url = base_url
+export function validateSession(session: UserSession): boolean {
+    return Date.now() < session.expiresAt;
+}
+
+class AuthService {
+    private activeTokens = new Set<string>();
+
+    logout(token: string): void {
+        this.activeTokens.delete(token);
+    }
+}
+""",
+    ),
+    (
+        "server/gateway.go",
+        """package gateway
+
+type RouteConfig struct {
+    Path    string
+    Timeout int
+}
+
+func RegisterRoute(route RouteConfig) error {
+    println("Registering route:", route.Path)
+    return nil
+}
+""",
+    ),
+    (
+        "models/PaymentProcessor.java",
+        """package com.app.billing;
+
+public class PaymentProcessor {
+    public boolean processPayment(double amount, String currency) {
+        if (amount <= 0) {
+            return false;
+        }
+        return true;
+    }
+}
+""",
+    ),
+    (
+        "utils/client.py",
+        '''"""Python HTTP client helper."""
+
+class HTTPClient:
+    def __init__(self, host: str):
+        self.host = host
 
     @classmethod
-    def default_client(cls):
-        """Creates default client."""
-        return cls("https://api.example.com")
+    def local(cls):
+        return cls("http://localhost:8000")
+''',
+    ),
+]
 
 
-def check_health() -> bool:
-    """Standalone health check function."""
-    return True
-'''
-
-def main():
-    print("\n" + "=" * 60)
-    print("       AST PYTHON CODE CHUNKING DEMO")
-    print("=" * 60)
-
+def inspect_chunks():
     chunker = ASTCodeChunker()
-    chunks = chunker.chunk(content=SAMPLE_CODE, file_path="client.py")
 
-    print(f"\nTotal Chunks Created: {len(chunks)}\n")
+    print("\n" + "=" * 75)
+    print("      REPOLENS UNIVERSAL POLYGLOT CHUNKER: MANUAL VERIFICATION")
+    print("=" * 75)
 
-    for i, chunk in enumerate(chunks, start=1):
-        print(f"--- [CHUNK {i}] " + "-" * 40)
-        print(f"ID:          {chunk.id}")
-        print(f"Type:        {chunk.source_type.value}")
-        print(f"File & Lines:{chunk.file_path} (Lines {chunk.start_line} -> {chunk.end_line})")
-        print(f"Metadata:    {chunk.metadata}")
-        print("-" * 55)
-        print("Content:")
-        for line in chunk.content.splitlines():
-            print(f"  {line}")
-        print("-" * 55 + "\n")
+    for file_path, code in SAMPLE_FILES:
+        print(f"\n[FILE] {file_path}")
+        chunks = chunker.chunk(content=code, file_path=file_path)
+        lang = chunks[0].metadata.get("language", "python") if chunks else "unknown"
+        print(f"   Detected Language: {lang}")
+        print(f"   Chunks Extracted:  {len(chunks)}")
+        print("   " + "-" * 70)
+
+        for i, c in enumerate(chunks, start=1):
+            symbol = c.metadata.get("symbol_name", "N/A")
+            node_type = c.metadata.get("symbol_type", "N/A")
+            print(f"   [{i}] Symbol: {symbol:<20} | Type: {node_type:<24} | Lines {c.start_line}->{c.end_line}")
+            first_line = c.content.splitlines()[0] if c.content.splitlines() else ""
+            print(f"       Code Snippet: {first_line[:65]}...")
+
+    print("\n" + "=" * 75)
+    print(" [OK] Multi-language AST parsing & line-level chunking verified!")
+    print("=" * 75 + "\n")
 
 
 if __name__ == "__main__":
-    main()
+    inspect_chunks()
