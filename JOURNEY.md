@@ -237,12 +237,6 @@ System B introduced end-to-end distributed span tracing via LangSmith:
      └── Groq LPU Generation (850ms)
 ```
 
-### 5. Interactive Web Bench & Live Architecture Ablation Switcher
-To make empirical comparisons intuitive and verifiable in real-time, we upgraded the frontend and FastAPI backend with a dynamic **Architecture Ablation Switcher**:
-- **Strategy Dispatcher**: Added `QueryRequest.system` (`'a'` for Baseline Dense vs `'b'` for Hybrid BM25+RRF) to [`src/backend/api/schemas.py`](file:///c:/Users/MAHEN/Desktop/engineering-knowledge-copilot/src/backend/api/schemas.py) and dynamic lazy-singleton routing in [`src/backend/api/main.py`](file:///c:/Users/MAHEN/Desktop/engineering-knowledge-copilot/src/backend/api/main.py).
-- **Interactive UI**: Added toggle controls in [`frontend/index.html`](file:///c:/Users/MAHEN/Desktop/engineering-knowledge-copilot/frontend/index.html) allowing developers to submit queries against both architectures side-by-side.
-- **Rich Citation Inspector**: Rendered line citations (`L86-L155`), collapsible evidence snippets, and sub-second latency splits between vector/sparse search and Groq LPU generation.
-
 ---
 
 *This journal is updated at every ablation stage with reproducible metrics, diffs, and post-mortem analyses.*
