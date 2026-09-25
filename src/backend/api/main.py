@@ -7,12 +7,13 @@ from fastapi.staticfiles import StaticFiles
 
 from ai.agents.baseline_rag import BaselineRAG
 from ai.agents.hybrid_rag import HybridRAG
+from ai.agents.routed_rag import RoutedRAG
 from backend.api.schemas import CitationItem, QueryRequest, QueryResponse, RepoStatsResponse
 
 app = FastAPI(
     title="RepoLens: Multi-Agent Knowledge & Citation Engine",
     description="Deterministic repository knowledge and citation engine.",
-    version="0.2.0",
+    version="0.3.0",
 )
 
 app.add_middleware(
@@ -26,6 +27,7 @@ app.add_middleware(
 # Shared RAG instances, initialized lazily on first query
 _baseline_rag: BaselineRAG | None = None
 _hybrid_rag: HybridRAG | None = None
+_routed_rag: RoutedRAG | None = None
 
 
 def get_baseline_rag() -> BaselineRAG:
@@ -40,6 +42,13 @@ def get_hybrid_rag() -> HybridRAG:
     if _hybrid_rag is None:
         _hybrid_rag = HybridRAG()
     return _hybrid_rag
+
+
+def get_routed_rag() -> RoutedRAG:
+    global _routed_rag
+    if _routed_rag is None:
+        _routed_rag = RoutedRAG()
+    return _routed_rag
 
 
 @app.get("/health")
@@ -83,7 +92,7 @@ def get_repo_stats() -> RepoStatsResponse:
         ticket_chunks=ticket_count,
         vector_store="ChromaDB (all-MiniLM-L6-v2) + BM25 Sparse",
         generator_model="Groq (qwen/qwen3.8-27b)",
-        system_status="System B (Hybrid BM25 + Dense RRF) Active",
+        system_status="System C (Cascading Intent Router) Active",
     )
 
 
@@ -93,22 +102,31 @@ def handle_query(req: QueryRequest) -> QueryResponse:
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
     try:
-        use_system_a = req.system.strip().lower() == "a"
-        if use_system_a:
+        sys = req.system.strip().lower()
+        if sys == "a":
             rag = get_baseline_rag()
             rag_output = rag.answer(req.query.strip())
             version_str = "System A (Baseline Dense RAG)"
-        else:
+        elif sys == "b":
             rag = get_hybrid_rag()
             rag_output = rag.answer(req.query.strip())
             version_str = "System B (Hybrid BM25 + Dense RRF)"
+        else:
+            rag = get_routed_rag()
+            rag_output = rag.answer(req.query.strip())
+            version_str = "System C (Cascading Intent Router)"
+
+        routing_decision = rag_output.get("routing_decision") or {}
+        intent_val = routing_decision.get("intent")
+        intent_str = intent_val.value if hasattr(intent_val, "value") else str(intent_val) if intent_val else None
+        route_source = routing_decision.get("route_source")
 
         citations: List[CitationItem] = []
         for chunk in rag_output.get("retrieved_chunks", []):
             fp = chunk.get("file_path", "unknown")
             dtype = chunk.get("doc_type")
             if not dtype or dtype == "unknown":
-                if fp.endswith(".py"):
+                if fp.endswith(".py") or fp.endswith(".ts") or fp.endswith(".go") or fp.endswith(".rs") or fp.endswith(".java"):
                     dtype = "code"
                 elif fp.endswith(".md"):
                     dtype = "documentation"
@@ -134,6 +152,8 @@ def handle_query(req: QueryRequest) -> QueryResponse:
             generation_latency_ms=round(rag_output.get("generation_latency_ms", 0.0), 1),
             total_latency_ms=round(rag_output.get("total_latency_ms", 0.0), 1),
             system_version=version_str,
+            intent=intent_str,
+            route_source=route_source,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Generation error: {str(e)}")

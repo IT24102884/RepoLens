@@ -24,3 +24,12 @@ def test_frontend_index_serving():
     assert response.status_code == 200
     assert 'RepoLens' in response.text
     assert len(response.text) > 1000
+
+def test_query_system_c_out_of_scope():
+    response = client.post('/api/query', json={'query': 'What is the weather in Tokyo?', 'system': 'c'})
+    assert response.status_code == 200
+    data = response.json()
+    assert 'System C' in data['system_version']
+    assert data['intent'] == 'OUT_OF_SCOPE'
+    assert 'outside the scope' in data['answer']
+    assert len(data['citations']) == 0

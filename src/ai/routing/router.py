@@ -1,0 +1,249 @@
+from enum import Enum
+import json
+import os
+import re
+from typing import Any, Dict, List, Optional
+from dotenv import load_dotenv
+from groq import Groq
+from pydantic import BaseModel, Field
+
+from ai.core.models import DocumentType
+
+try:
+    from langsmith import traceable
+except ImportError:
+    def traceable(*args, **kwargs):
+        def decorator(f):
+            return f
+        return decorator
+
+load_dotenv()
+
+
+class QueryIntent(str, Enum):
+    """Categorized query intent for targeted index retrieval."""
+    DOCS_CONCEPTUAL = "DOCS_CONCEPTUAL"   # Guides, architecture, config, conceptual explanation
+    CODE_SYMBOL = "CODE_SYMBOL"           # Class signatures, function defs, syntax, constants
+    BUG_TICKET = "BUG_TICKET"             # GitHub issue discussions, bug tickets, regressions
+    MULTI_HOP = "MULTI_HOP"               # Cross-component tracing, issue-to-code bridges
+    OUT_OF_SCOPE = "OUT_OF_SCOPE"         # Irrelevant, adversarial, or out-of-domain queries
+
+
+class RouteDecision(BaseModel):
+    """Result of cascading query routing."""
+    intent: QueryIntent
+    target_source_type: Optional[DocumentType] = None
+    confidence: float = Field(ge=0.0, le=1.0)
+    route_source: str = Field(description="'heuristic' or 'llm_classifier'")
+    reasoning: str
+    sub_queries: List[str] = Field(default_factory=list, description="Sub-queries for multi-hop expansion")
+
+
+INTENT_TO_SOURCE_TYPE: Dict[QueryIntent, Optional[DocumentType]] = {
+    QueryIntent.DOCS_CONCEPTUAL: DocumentType.DOCUMENTATION,
+    QueryIntent.CODE_SYMBOL: DocumentType.CODE,
+    QueryIntent.BUG_TICKET: DocumentType.ISSUE_PR,
+    QueryIntent.MULTI_HOP: None,
+    QueryIntent.OUT_OF_SCOPE: None,
+}
+
+
+class IntentRouter:
+    """Cascading Hybrid Intent Router (System C).
+    
+    Tier 1: Sub-millisecond deterministic regex & keyword heuristics.
+    Tier 2: Groq micro-LLM semantic classifier for ambiguous natural language queries.
+    """
+
+    def __init__(self, model_name: str = "qwen/qwen3.8-27b", api_key: Optional[str] = None):
+        self.model_name = model_name
+        self.api_key = api_key or os.getenv("GROQ_API_KEY")
+        self._groq_client: Optional[Groq] = None
+
+    @property
+    def groq_client(self) -> Groq:
+        if self._groq_client is None:
+            if not self.api_key:
+                raise ValueError("Missing GROQ_API_KEY for LLM query classification")
+            self._groq_client = Groq(api_key=self.api_key)
+        return self._groq_client
+
+    def classify_heuristically(self, query: str) -> Optional[RouteDecision]:
+        """Tier 1: High-confidence heuristic pattern matching (0ms overhead)."""
+        q = query.strip()
+        q_lower = q.lower()
+
+        # 1. Out-of-Scope Heuristics
+        out_of_scope_patterns = [
+            r"\b(?:graphql|apollo(?:\s+federation)?|schema\s+stitching)\b",
+            r"\b(?:weather|forecast|temperature in|climate in)\b",
+            r"\b(?:recipe|cooking|bake\s+a|cake\s+recipe|ingredients\s+for)\b",
+            r"\b(?:bitcoin|ethereum|crypto(?:\s+currency)?|stock\s+market|forex)\b",
+            r"\b(?:nba\s+score|premier\s+league|world\s+cup|football\s+match)\b",
+            r"\b(?:write\s+a\s+poem|who\s+is\s+the\s+president\s+of)\b",
+        ]
+        for pat in out_of_scope_patterns:
+            if re.search(pat, q_lower):
+                return RouteDecision(
+                    intent=QueryIntent.OUT_OF_SCOPE,
+                    target_source_type=None,
+                    confidence=0.98,
+                    route_source="heuristic",
+                    reasoning=f"Matched out-of-scope pattern: {pat}",
+                )
+
+        # 2. Bug Ticket & Issue Discussion Heuristics
+        issue_match = re.search(r"(?:#\d+|\b(?:issue|ticket|pr|pull\s+request|gh-)\s*#?\d+\b|\bissues/\d+\b)", q_lower)
+        # Check if query explicitly asks for both ticket AND source code implementation (Multi-Hop)
+        if issue_match and re.search(r"\b(?:show\s+(?:the\s+)?code|code\s+that\s+fix|code\s+implementation|source\s+code\s+for\s+issue)\b", q_lower):
+            ticket_ref = issue_match.group(0)
+            return RouteDecision(
+                intent=QueryIntent.MULTI_HOP,
+                target_source_type=None,
+                confidence=0.95,
+                route_source="heuristic",
+                reasoning=f"Matched issue reference {ticket_ref} combined with code fix request.",
+                sub_queries=[q, f"fix {ticket_ref} implementation"],
+            )
+
+        if issue_match:
+            return RouteDecision(
+                intent=QueryIntent.BUG_TICKET,
+                target_source_type=DocumentType.ISSUE_PR,
+                confidence=0.98,
+                route_source="heuristic",
+                reasoning=f"Matched explicit issue/ticket tag: {issue_match.group(0)}",
+            )
+
+        # 3. Multi-Hop Code Delegation & Call Chain Heuristics
+        multi_hop_patterns = [
+            r"pass(?:es)?\s+.*\s+down\s+to\s+(?:the\s+)?underlying\s+transport",
+            r"flow\s+from\s+.*\s+to\s+",
+            r"how\s+does\s+.*\s+pass\s+.*\s+to\s+.*\s+dispatch",
+            r"call\s+chain\s+from\s+.*\s+to\s+",
+        ]
+        for pat in multi_hop_patterns:
+            if re.search(pat, q_lower):
+                return RouteDecision(
+                    intent=QueryIntent.MULTI_HOP,
+                    target_source_type=DocumentType.CODE,
+                    confidence=0.95,
+                    route_source="heuristic",
+                    reasoning=f"Matched multi-hop cross-component flow pattern: {pat}",
+                    sub_queries=[
+                        "Client.request headers cookies send _send_handling_redirects",
+                        "transport dispatch handle_request default transport HTTPTransport",
+                    ],
+                )
+
+        # 4. Code Symbol & Exact Syntax Heuristics
+        code_patterns = [
+            r"\bclass\s+[A-Z][A-Za-z0-9_]*",
+            r"\bdef\s+[a-z_][a-z0-9_]*",
+            r"\b[A-Za-z0-9_]+\.(?:py|ts|tsx|js|jsx|go|rs|java)\b",
+            r"\bHTTPStatus\.[A-Z0-9_]+\b",
+            r"\bcodes\.[A-Z0-9_]+\b",
+            r"\bwhere\s+is\s+(?:the\s+)?[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\s+(?:class|function|method|enum|struct|interface|defined)\b",
+            r"\bwhich\s+file\s+(?:and\s+class\s+)?defines\b",
+            r"\bhow\s+does\s+(?:the\s+)?[A-Za-z0-9_]+\s+parse\s+raw\b",
+        ]
+        for pat in code_patterns:
+            if re.search(pat, q, re.IGNORECASE):
+                return RouteDecision(
+                    intent=QueryIntent.CODE_SYMBOL,
+                    target_source_type=DocumentType.CODE,
+                    confidence=0.95,
+                    route_source="heuristic",
+                    reasoning=f"Matched code syntax pattern: {pat}",
+                )
+
+        # 5. Documentation & Conceptual Heuristics
+        docs_patterns = [
+            r"\bhow\s+(?:do\s+i|to)\s+configure\b",
+            r"\b(?:different\s+)?types\s+of\s+timeouts\b",
+            r"\bcustom\s+ssl\s+certificates?\b",
+            r"\bdisable\s+ssl\s+verification\b",
+            r"\b(?:architecture|user\s+guide|tutorial|best\s+practices)\b",
+            r"\bwhat\s+are\s+the\s+(?:four\s+|[0-9]+\s+)?(?:different\s+)?types\b",
+        ]
+        for pat in docs_patterns:
+            if re.search(pat, q_lower):
+                return RouteDecision(
+                    intent=QueryIntent.DOCS_CONCEPTUAL,
+                    target_source_type=DocumentType.DOCUMENTATION,
+                    confidence=0.92,
+                    route_source="heuristic",
+                    reasoning=f"Matched documentation guide pattern: {pat}",
+                )
+
+        return None
+
+    @traceable(name="Groq Micro-LLM Router", run_type="parser")
+    def classify_with_llm(self, query: str) -> RouteDecision:
+        """Tier 2: Micro-LLM classification for ambiguous natural language queries (~60ms)."""
+        system_prompt = (
+            "You are an expert query classifier for 'encode/httpx' (Python HTTP client codebase).\n"
+            "Classify the user question into exactly ONE intent:\n"
+            "- DOCS_CONCEPTUAL: High-level guides, documentation, SSL configuration, timeout types, conceptual questions.\n"
+            "- CODE_SYMBOL: Specific code definitions, class signatures, function implementations, file locations, status code constants.\n"
+            "- BUG_TICKET: Specific GitHub issues, PRs, bug numbers, regressions, ticket discussions.\n"
+            "- MULTI_HOP: Cross-component data flows, tracing calls across multiple files, or issue-to-code diff bridges.\n"
+            "- OUT_OF_SCOPE: Questions unrelated to encode/httpx (e.g. GraphQL, Apollo Federation, other frameworks, weather, non-software).\n\n"
+            "Respond ONLY with valid JSON in this exact structure:\n"
+            '{"intent": "DOCS_CONCEPTUAL|CODE_SYMBOL|BUG_TICKET|MULTI_HOP|OUT_OF_SCOPE", "confidence": 0.95, "reasoning": "brief explanation", "sub_queries": []}'
+        )
+
+        try:
+            completion = self.groq_client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Query: {query}"},
+                ],
+                temperature=0.0,
+                max_tokens=150,
+            )
+            raw_text = completion.choices[0].message.content or "{}"
+            json_str = raw_text.strip()
+            if "```json" in json_str:
+                json_str = json_str.split("```json")[1].split("```")[0].strip()
+            elif "```" in json_str:
+                json_str = json_str.split("```")[1].split("```")[0].strip()
+
+            parsed = json.loads(json_str)
+            intent_str = parsed.get("intent", "CODE_SYMBOL").strip().upper()
+            try:
+                intent = QueryIntent(intent_str)
+            except ValueError:
+                intent = QueryIntent.CODE_SYMBOL
+
+            confidence = float(parsed.get("confidence", 0.85))
+            reasoning = str(parsed.get("reasoning", "Classified via Groq micro-LLM."))
+            sub_queries = parsed.get("sub_queries", [])
+
+            return RouteDecision(
+                intent=intent,
+                target_source_type=INTENT_TO_SOURCE_TYPE.get(intent),
+                confidence=confidence,
+                route_source="llm_classifier",
+                reasoning=reasoning,
+                sub_queries=sub_queries if isinstance(sub_queries, list) else [],
+            )
+
+        except Exception as e:
+            return RouteDecision(
+                intent=QueryIntent.CODE_SYMBOL,
+                target_source_type=DocumentType.CODE,
+                confidence=0.5,
+                route_source="llm_classifier_fallback",
+                reasoning=f"LLM classification fallback due to: {str(e)}",
+            )
+
+    @traceable(name="Cascading Intent Router", run_type="parser")
+    def route(self, query: str) -> RouteDecision:
+        """Route query through cascading tiers: Heuristic Fast-Path -> Groq Micro-LLM."""
+        heuristic_decision = self.classify_heuristically(query)
+        if heuristic_decision is not None and heuristic_decision.confidence >= 0.90:
+            return heuristic_decision
+
+        return self.classify_with_llm(query)

@@ -1,4 +1,4 @@
-let currentSystem = "b";
+let currentSystem = "c";
 
 document.addEventListener("DOMContentLoaded", () => {
   loadRepoStats();
@@ -8,11 +8,21 @@ function switchSystem(sys) {
   currentSystem = sys;
   const btnA = document.getElementById("btnSystemA");
   const btnB = document.getElementById("btnSystemB");
+  const btnC = document.getElementById("btnSystemC");
   const badge = document.getElementById("headerSystemBadge");
 
-  if (sys === "b") {
+  [btnA, btnB, btnC].forEach((b) => b && b.classList.remove("active"));
+
+  if (sys === "c") {
+    if (btnC) btnC.classList.add("active");
+    if (badge) {
+      badge.textContent = "System C (Cascading Intent Router)";
+      badge.style.color = "#c084fc";
+      badge.style.borderColor = "rgba(192, 132, 252, 0.4)";
+      badge.style.backgroundColor = "rgba(192, 132, 252, 0.1)";
+    }
+  } else if (sys === "b") {
     if (btnB) btnB.classList.add("active");
-    if (btnA) btnA.classList.remove("active");
     if (badge) {
       badge.textContent = "System B (Hybrid BM25+RRF)";
       badge.style.color = "#4ade80";
@@ -21,7 +31,6 @@ function switchSystem(sys) {
     }
   } else {
     if (btnA) btnA.classList.add("active");
-    if (btnB) btnB.classList.remove("active");
     if (badge) {
       badge.textContent = "System A (Baseline Dense)";
       badge.style.color = "#60a5fa";
@@ -79,7 +88,9 @@ async function submitQuery(e) {
   const statusText = document.getElementById("statusText");
   if (statusIndicator) statusIndicator.style.display = "flex";
   if (statusText) {
-    if (currentSystem === "b") {
+    if (currentSystem === "c") {
+      statusText.textContent = "Routing query via Cascading Router (Heuristics -> Micro-LLM)...";
+    } else if (currentSystem === "b") {
       statusText.textContent = "Running Hybrid Search (Chroma Dense + BM25 Sparse with RRF k=60)...";
     } else {
       statusText.textContent = "Running ChromaDB Dense Vector Search (cosine similarity)...";
@@ -136,7 +147,6 @@ function appendUserMessage(text) {
 function renderMarkdown(rawText) {
   if (!rawText) return "";
 
-  // Extract and stash code blocks to avoid messing up escaping
   const codeBlocks = [];
   let text = rawText.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (match, lang, code) => {
     const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
@@ -144,16 +154,11 @@ function renderMarkdown(rawText) {
     return placeholder;
   });
 
-  // Basic markdown styling
   text = escapeHtml(text);
-  // Inline code `...`
   text = text.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
-  // Bold **...**
   text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  // Newlines
   text = text.replace(/\n\n/g, "<br/><br/>").replace(/\n/g, "<br/>");
 
-  // Restore code blocks
   codeBlocks.forEach((block, idx) => {
     text = text.replace(`__CODE_BLOCK_${idx}__`, block);
   });
@@ -202,8 +207,13 @@ function appendAIMessage(data) {
     `;
   }
 
+  const isSystemC = (data.system_version || "").includes("System C");
   const isSystemB = (data.system_version || "").includes("System B");
-  const badgeColor = isSystemB ? "#4ade80" : "#60a5fa";
+  const badgeColor = isSystemC ? "#c084fc" : isSystemB ? "#4ade80" : "#60a5fa";
+
+  const routingTag = data.intent
+    ? `<span style="font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); font-weight: 600; margin-left: 6px;">🎯 ${data.intent} (${data.route_source || 'routed'})</span>`
+    : "";
 
   div.innerHTML = `
     <div class="ai-avatar">
@@ -217,7 +227,7 @@ function appendAIMessage(data) {
     <div class="ai-bubble">
       <div class="ai-meta">
         <div>
-          <strong style="color: #ffffff;">RepoLens Engine</strong> • <span style="color: ${badgeColor}; font-weight: 500;">${data.system_version}</span>
+          <strong style="color: #ffffff;">RepoLens Engine</strong> • <span style="color: ${badgeColor}; font-weight: 500;">${data.system_version}</span>${routingTag}
         </div>
         <div class="ai-timing">
           ⚡ ${(data.total_latency_ms / 1000).toFixed(2)}s (Ret: ${data.retrieval_latency_ms.toFixed(0)}ms, Gen: ${data.generation_latency_ms.toFixed(0)}ms)

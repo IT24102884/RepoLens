@@ -750,6 +750,11 @@ body {
   box-shadow: 0 0 6px rgba(56, 139, 253, 0.6);
 }
 
+.arch-dot.purple {
+  background-color: #a855f7;
+  box-shadow: 0 0 6px rgba(168, 85, 247, 0.6);
+}
+
 .arch-desc {
   font-size: 0.7rem;
   color: #8b949e;

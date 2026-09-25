@@ -33,7 +33,7 @@
       <div>
         <div class="brand-row">
           <span class="brand-name">RepoLens</span>
-          <span class="badge-system" id="headerSystemBadge">System B (Hybrid BM25+RRF)</span>
+          <span class="badge-system" id="headerSystemBadge" style="color: #c084fc; border-color: rgba(192, 132, 252, 0.4); background-color: rgba(192, 132, 252, 0.1);">System C (Cascading Intent Router)</span>
         </div>
         <p class="brand-sub">Multi-Agent Repository Knowledge & Citation Engine</p>
       </div>
@@ -65,7 +65,14 @@
       <div class="side-section">
         <h3 class="section-title">Architecture Ablation</h3>
         <div class="arch-toggle-container">
-          <button type="button" id="btnSystemB" class="arch-btn active" onclick="switchSystem('b')">
+          <button type="button" id="btnSystemC" class="arch-btn active" onclick="switchSystem('c')">
+            <div class="arch-btn-header">
+              <span class="arch-dot purple"></span>
+              <strong>System C: Routed RAG</strong>
+            </div>
+            <span class="arch-desc">Cascading Router + Modality Filter</span>
+          </button>
+          <button type="button" id="btnSystemB" class="arch-btn" onclick="switchSystem('b')">
             <div class="arch-btn-header">
               <span class="arch-dot green"></span>
               <strong>System B: Hybrid RAG</strong>
@@ -207,7 +214,7 @@
       <!-- Status Indicator -->
       <div id="statusIndicator" class="status-indicator-bar" style="display: none;">
         <div class="spinner"></div>
-        <span id="statusText">Searching ChromaDB vectors (1,562 chunks)...</span>
+        <span id="statusText">Routing query via Cascading Router (Heuristics -> Micro-LLM)...</span>
       </div>
 
       <!-- INPUT BAR -->

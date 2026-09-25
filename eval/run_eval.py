@@ -1,7 +1,10 @@
+import argparse
 import json
 from pathlib import Path
 import time
 from ai.agents.baseline_rag import BaselineRAG
+from ai.agents.hybrid_rag import HybridRAG
+from ai.agents.routed_rag import RoutedRAG
 from ai.evaluation.metrics import (
     evaluate_citation_presence,
     evaluate_faithfulness,
@@ -11,7 +14,7 @@ from ai.evaluation.metrics import (
 )
 
 
-def run_benchmark():
+def run_benchmark(system_choice: str = "c"):
     benchmark_file = Path("eval/data/benchmark.jsonl")
     reports_dir = Path("eval/reports")
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -27,12 +30,25 @@ def run_benchmark():
             if line.strip():
                 questions.append(json.loads(line))
 
+    sys_key = system_choice.strip().lower()
+    if sys_key == "a":
+        rag = BaselineRAG()
+        sys_name = "SYSTEM A (NAIVE DENSE RAG)"
+        report_file = "system_a_baseline.json"
+    elif sys_key == "b":
+        rag = HybridRAG()
+        sys_name = "SYSTEM B (HYBRID BM25 + DENSE RRF)"
+        report_file = "system_b_hybrid.json"
+    else:
+        rag = RoutedRAG()
+        sys_name = "SYSTEM C (CASCADING INTENT ROUTER)"
+        report_file = "system_c_routed.json"
+
     print("\n" + "=" * 80)
-    print(f"       REPOLENS EVALUATION HARNESS — SYSTEM A (NAIVE DENSE RAG)")
+    print(f"       REPOLENS EVALUATION HARNESS — {sys_name}")
     print("=" * 80)
     print(f"Loaded {len(questions)} benchmark queries across 8 evaluation categories.\n")
 
-    rag = BaselineRAG()
     results = []
 
     header = f"{'ID':<6} | {'Category':<16} | {'Recall':<7} | {'Faithful':<8} | {'Refusal':<7} | {'Cite':<5} | {'Latency':<7}"
@@ -47,7 +63,7 @@ def run_benchmark():
         expected_keywords = q.get("expected_keywords", [])
         must_refuse = q.get("must_refuse", False)
 
-        # Run through the baseline pipeline
+        # Run through selected pipeline
         output = rag.answer(question_text)
 
         # Compute objective and judge metrics
@@ -69,6 +85,8 @@ def run_benchmark():
             "faithfulness": faithfulness,
             "latency_sec": latency_sec,
             "answer": output["answer"],
+            "retrieved_chunks": output.get("retrieved_chunks", []),
+            "routing_decision": output.get("routing_decision"),
         })
 
         row = f"{query_id:<6} | {category:<16} | {recall*100:>5.1f}% | {faithfulness*100:>7.1f}% | {refusal*100:>6.1f}% | {citation*100:>4.0f}% | {latency_sec:>6.2f}s"
@@ -87,7 +105,7 @@ def run_benchmark():
 
     print("-" * 80)
     print("\n" + "=" * 50)
-    print("         SYSTEM A (BASELINE) SCORECARD")
+    print(f"         {sys_name} SCORECARD")
     print("=" * 50)
     print(f"  Retrieval Recall@5:    {avg_recall * 100:.1f}%")
     print(f"  Keyword Coverage:      {avg_kw * 100:.1f}%")
@@ -98,11 +116,11 @@ def run_benchmark():
     print("=" * 50)
 
     # Save detailed evaluation run to disk
-    report_path = reports_dir / "system_a_baseline.json"
+    report_path = reports_dir / report_file
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(
             {
-                "system": "System A (Naive Dense RAG)",
+                "system": sys_name,
                 "summary": {
                     "recall": avg_recall,
                     "keyword_coverage": avg_kw,
@@ -121,5 +139,12 @@ def run_benchmark():
 
 
 if __name__ == "__main__":
-    run_benchmark()
-
+    parser = argparse.ArgumentParser(description="RepoLens Benchmark Evaluation Harness")
+    parser.add_argument(
+        "--system",
+        choices=["a", "b", "c"],
+        default="c",
+        help="System architecture to evaluate: 'a' (Baseline), 'b' (Hybrid), 'c' (Routed)",
+    )
+    args = parser.parse_args()
+    run_benchmark(args.system)
