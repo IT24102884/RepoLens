@@ -125,14 +125,19 @@ def get_repo_stats() -> RepoStatsResponse:
             for line in f:
                 if not line.strip():
                     continue
-                data = json.loads(line)
-                dtype = data.get("doc_type", "")
-                if dtype == "code":
-                    code_count += 1
-                elif dtype == "documentation":
-                    doc_count += 1
-                elif dtype == "issue_pr":
-                    ticket_count += 1
+                try:
+                    data = json.loads(line)
+                    raw_type = str(data.get("source_type") or data.get("doc_type") or "").upper()
+                    if "CODE" in raw_type:
+                        code_count += 1
+                    elif "DOC" in raw_type:
+                        doc_count += 1
+                    elif "ISSUE" in raw_type or "TICKET" in raw_type or "PR" in raw_type:
+                        ticket_count += 1
+                    else:
+                        code_count += 1
+                except Exception:
+                    continue
 
     total = code_count + doc_count + ticket_count
     if not total and _active_repo_profile.repo_name == "encode/httpx":
@@ -339,16 +344,21 @@ def handle_query(req: QueryRequest) -> QueryResponse:
         citations: List[CitationItem] = []
         for chunk in rag_output.get("retrieved_chunks", []):
             fp = chunk.get("file_path", "unknown")
-            dtype = chunk.get("doc_type")
-            if not dtype or dtype == "unknown":
-                if fp.endswith(".py") or fp.endswith(".ts") or fp.endswith(".go") or fp.endswith(".rs") or fp.endswith(".java"):
-                    dtype = "code"
-                elif fp.endswith(".md"):
-                    dtype = "documentation"
-                elif "issue" in fp.lower() or "ticket" in fp.lower():
-                    dtype = "issue_pr"
-                else:
-                    dtype = "code"
+            raw_type = str(chunk.get("source_type") or chunk.get("doc_type") or "").lower()
+            if "code" in raw_type:
+                dtype = "code"
+            elif "doc" in raw_type:
+                dtype = "documentation"
+            elif "issue" in raw_type or "ticket" in raw_type or "pr" in raw_type:
+                dtype = "issue_pr"
+            elif fp.endswith(".py") or fp.endswith(".ts") or fp.endswith(".go") or fp.endswith(".rs") or fp.endswith(".java"):
+                dtype = "code"
+            elif fp.endswith(".md"):
+                dtype = "documentation"
+            elif "issue" in fp.lower() or "ticket" in fp.lower():
+                dtype = "issue_pr"
+            else:
+                dtype = "code"
             citations.append(
                 CitationItem(
                     file_path=fp,
