@@ -198,6 +198,8 @@ While we started with Python (`httpx`) to isolate retrieval mechanics, RepoLens 
 | **System B** | 2026-09-24 | Code-aware BM25 index + RRF ($k=60$) + AST class body extraction | Exact tokens (FAIL-004) & Tickets (FAIL-002) | ✅ Completed |
 | **Polyglot AST** | 2026-09-25 | Universal Tree-sitter parsers (Python, TS/JS, Go, Rust, Java) | Language boundary limitations | ✅ Completed |
 | **System C** | 2026-09-25 | Cascading Hybrid Router (Regex + Micro-LLM) & Modality Filtering | Modality noise & Out-of-scope hallucinations | ✅ Completed |
+| **Dynamic Ingest**| 2026-09-26 | RepoCloner (shallow clone) + RepoProfiler + Distance Gating | Static benchmark limitation | ✅ Completed |
+| **Two-Pillar Overview**| 2026-09-26 | Semantic Query Rewriter (Micro-LLM) + Repo Card Preamble | Meta-query & Big-picture amnesia | ✅ Completed |
 | **System D** | Next | Self-correcting critic agent with LLM citation verification | Hallucinations (FAIL-001) & phantom citations | 🚧 Next |
 | **System E** | Upcoming | Multi-hop query decomposition & bounded retries | Multi-hop call chains (FAIL-003) | 📋 Planned |
 
@@ -358,10 +360,76 @@ flowchart TD
    - Repository switcher allowing users to toggle between ingested repositories or return to the `encode/httpx` baseline.
 
 ### 3. Verification & Empirical Scorecard
-- **Test Suite**: Expanded to **46 automated tests** (100% pass across integration, cloner, profiler, and router tests).
+- **Test Suite**: Expanded to **50 automated tests** (100% pass across integration, cloner, profiler, and router tests).
 - **Retrieval Recall@5**: Retains **100.0%** across all 8 evaluation queries.
 - **Refusal Accuracy**: **100.0%** on out-of-scope queries with sub-second latency.
 - **Citation Presence**: **100.0%**.
+
+---
+
+## Chapter 11: The Overview Dilemma & The Two-Pillar Industry Architecture
+
+### 1. The Meta-Query Breakdown
+During dynamic ingestion testing, a fundamental RAG blindspot emerged on broad meta-queries:
+- *"Tell me about this repo"*
+- *"What is the big picture of this codebase?"*
+- *"What does this project do?"*
+
+When evaluated on standard RAG pipelines:
+1. **Lexical Mismatch**: Sparse search (BM25) searches for conversational words (*"tell"*, *"about"*, *"repo"*), completely missing `README.md` or architecture summaries.
+2. **Dense Vector Noise**: Embedding a colloquial query like *"tell me about it"* produces low cosine similarity against specific technical documentation sections, occasionally triggering out-of-scope distance gates.
+3. **Macro Context Amnesia**: Even if relevant chunks are retrieved, the generator LLM lacks top-down awareness of the repository's identity, primary domain, and subsystem layout, producing fragmented or hesitant answers.
+4. **Brittle Heuristic Trap**: Attempting to catch these queries via regex pattern lists (`if "tell me about" in query:`) is an ad-hoc band-aid that inevitably fails on unlisted variations (*"give me the 10,000 foot view"*, *"what is the main purpose"*).
+
+### 2. The Two-Pillar Industry Architecture
+To resolve this permanently without hardcoded regex lists, we engineered a principled **two-pillar architecture**:
+
+```mermaid
+flowchart TD
+    UserQuery["User Meta-Query: 'what is the big picture?'"] --> Tier2Router["Micro-LLM Intent Router"]
+    
+    subgraph Pillar1 ["Pillar 1: Semantic Query Reformulation"]
+        Tier2Router --> RouteDecision["RouteDecision(intent=DOCS_CONCEPTUAL,\noptimized_search_query='httpx HTTP client architecture overview README')"]
+        RouteDecision --> DocSearch["Targeted Doc Retrieval with Graceful Unconstrained Fallback"]
+        DocSearch --> Chunks["Retrieved Chunks (README.md, architecture guides)"]
+    end
+
+    subgraph Pillar2 ["Pillar 2: Permanent Repo Card System Preamble"]
+        RepoProfile["RepoProfile (Extracted during Ingestion)"] --> RepoCard["=== REPOSITORY IDENTITY CARD ===\n* Repo: encode/httpx\n* Domain: Next-gen HTTP client for Python\n* Subsystems: core_client, transports, docs"]
+    end
+
+    RepoCard & Chunks & UserQuery --> Generator["Groq LPU Generator"]
+    Generator --> GroundedOverview["Grounded, Line-Cited Architectural Overview"]
+```
+
+#### Pillar 1: Semantic Query Rewriter / Reformulation (`src/ai/routing/router.py`)
+- Extended `RouteDecision` with `optimized_search_query: Optional[str] = None`.
+- The Tier 2 Groq micro-LLM (`qwen/qwen3.8-27b`) is instructed:
+  > *"If the query asks for an overview, summary, purpose, or high-level architecture of the repository, provide an 'optimized_search_query' combining key concepts, domain terms, and README/architecture keywords."*
+- Handles arbitrary colloquial phrasings dynamically (~60ms) without maintaining static regex lists.
+- [`src/ai/agents/routed_rag.py`](file:///c:/Users/MAHEN/Desktop/engineering-knowledge-copilot/src/ai/agents/routed_rag.py) uses `decision.optimized_search_query` for retrieval, searching `DOCUMENTATION` with an automatic fallback to unconstrained search if dedicated doc files are absent.
+
+#### Pillar 2: Permanent Repo Card System Preamble (`src/ai/agents/routed_rag.py`)
+- Every generation turn injects the structured `RepoProfile` (~50 tokens) directly into the LLM system prompt:
+  ```text
+  === REPOSITORY IDENTITY CARD ===
+  * Repository: {repo_name}
+  * Domain & Overview: {description}
+  * Primary Languages: {languages}
+  * Key Subsystems: {subsystems}
+  ================================
+  ```
+- Gives the generator permanent macro-context so it can synthesize top-level purpose and cite exact lines from retrieved files simultaneously.
+
+### 3. Distance Gating & Chunking Refinements
+1. **Dual-Condition Distance Gating**:
+   In `src/ai/retrieval/hybrid_retriever.py`, the noise floor threshold ($\tau = 0.28$) only rejects queries when dense similarity is below threshold **and** sparse BM25 hits are empty (`top_sim < threshold and not sparse_results`), preventing false rejections on rare lexical tokens.
+2. **Universal Sliding Window Fallback**:
+   In `src/ai/ingestion/code_chunker.py`, files unsupported by Tree-sitter grammars automatically fall back to a 60-line sliding window with 10-line overlap, ensuring zero unindexed files across dynamic repositories.
+
+### 4. Verification
+- **Test Suite**: 50/50 tests passing cleanly (`uv run pytest`).
+- **Live Verification**: Successfully verified on `encode/httpx` (*"what is the big picture of this codebase?"*) and dynamically ingested `IT24102884/ecommerce-return-predictor` (*"what is this project and how does it predict returns?"*), citing exact lines from both code and documentation.
 
 ---
 
