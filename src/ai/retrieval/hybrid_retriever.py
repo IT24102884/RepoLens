@@ -18,6 +18,9 @@ except ImportError:
 class HybridRetriever:
     """Hybrid Retriever combining ChromaDB Dense Vector Search and BM25 Sparse Search
     using Reciprocal Rank Fusion (RRF with k=60).
+    
+    Includes Mathematical Distance Gating: Drops candidate union if the top dense match
+    falls below the noise floor (default 0.28 cosine similarity).
     """
 
     def __init__(
@@ -25,10 +28,12 @@ class HybridRetriever:
         dense_retriever: Optional[ChromaRetriever] = None,
         sparse_retriever: Optional[BM25Retriever] = None,
         rrf_k: int = 60,
+        default_min_similarity: float = 0.28,
     ):
         self.dense_retriever = dense_retriever or ChromaRetriever()
         self.sparse_retriever = sparse_retriever or BM25Retriever()
         self.rrf_k = rrf_k
+        self.default_min_similarity = default_min_similarity
 
     @traceable(name="Hybrid RRF Search", run_type="retriever")
     def search(
@@ -37,18 +42,23 @@ class HybridRetriever:
         top_k: int = 5,
         filter_type: Optional[DocumentType] = None,
         candidate_pool_size: int = 50,
+        min_dense_similarity: Optional[float] = None,
     ) -> List[Tuple[DocumentChunk, float]]:
-        """Perform hybrid search by querying dense and sparse retrievers and fusing via RRF.
-        
-        Formula:
-            RRF_score(d) = (1 / (k + rank_dense(d))) + (1 / (k + rank_sparse(d)))
-        """
+        """Perform hybrid search with Reciprocal Rank Fusion and mathematical distance gating."""
+        threshold = min_dense_similarity if min_dense_similarity is not None else self.default_min_similarity
+
         # 1. Fetch dense candidates
         dense_results: List[Tuple[DocumentChunk, float]] = self.dense_retriever.search(
             query=query,
             top_k=candidate_pool_size,
             filter_type=filter_type,
         )
+
+        # Mathematical Distance Gate: If top dense similarity is below noise floor, query is out-of-scope
+        if dense_results and threshold > 0.0:
+            top_sim = dense_results[0][1]
+            if top_sim < threshold:
+                return []
 
         # 2. Fetch sparse candidates
         sparse_results: List[Tuple[DocumentChunk, float]] = self.sparse_retriever.search(

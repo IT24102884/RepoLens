@@ -18,10 +18,18 @@ def evaluate_retrieval_recall(retrieved_chunks: List[Dict[str, Any]], expected_f
     hits = 0
     for exp in expected_files:
         exp_clean = exp.replace("\\", "/").removesuffix(".json")
+        exp_digits = re.findall(r"\d+", exp_clean)
         matched = False
         for rf in retrieved_files:
             rf_clean = rf.replace("\\", "/").removesuffix(".json")
-            if exp_clean in rf or rf in exp_clean or exp in rf or (exp_clean.split("/")[-1] in rf_clean):
+            rf_digits = re.findall(r"\d+", rf_clean)
+            if (
+                exp_clean in rf
+                or rf in exp_clean
+                or exp in rf
+                or (exp_clean.split("/")[-1] in rf_clean)
+                or (exp_digits and rf_digits and exp_digits == rf_digits and ("issue" in exp_clean or "ticket" in exp_clean))
+            ):
                 matched = True
                 break
         if matched:

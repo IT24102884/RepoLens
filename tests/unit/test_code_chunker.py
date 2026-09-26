@@ -124,4 +124,36 @@ def test_treesitter_java_chunking():
 
     assert len(chunks) >= 1
     assert chunks[0].metadata["language"] == "java"
-    assert chunks[0].metadata["symbol_name"] == "Calculator"
+    assert chunks[0].metadata["symbol_name"] == "Calculator"
+
+
+def test_ast_code_chunker_windowed_fallback_large_file():
+    """Verify that a 130-line file with syntax errors is chunked into 60-line windows with 10-line overlap."""
+    lines = [f"broken_code_line_{i} = {i} +" for i in range(1, 131)]
+    broken_content = "\n".join(lines)
+
+    chunker = ASTCodeChunker()
+    chunks = chunker.chunk(content=broken_content, file_path="broken_large.py")
+
+    assert len(chunks) == 3
+    assert chunks[0].start_line == 1
+    assert chunks[0].end_line == 60
+    assert chunks[1].start_line == 51
+    assert chunks[1].end_line == 110
+    assert chunks[2].start_line == 101
+    assert chunks[2].end_line == 130
+    assert chunks[0].metadata["chunk_type"] == "sliding_window"
+    assert chunks[0].metadata["fallback"] is True
+
+
+def test_ast_code_chunker_unmapped_language_fallback():
+    """Files in languages without Tree-sitter parsers (e.g. Kotlin .kt) cleanly fallback to windowed chunks."""
+    kt_code = "\n".join([f"val item{i}: String = \"value_{i}\"" for i in range(1, 75)])
+    chunker = ASTCodeChunker()
+    chunks = chunker.chunk(content=kt_code, file_path="app/Main.kt")
+
+    assert len(chunks) == 2
+    assert chunks[0].metadata["language"] == "kt"
+    assert chunks[0].metadata["chunk_type"] == "sliding_window"
+    assert chunks[1].start_line == 51
+    assert chunks[1].end_line == 74

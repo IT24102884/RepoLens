@@ -29,26 +29,20 @@ class ASTCodeChunker(BaseChunker):
         ext = Path(file_path).suffix.lower()
 
         # If it's a non-Python code file (TypeScript, JavaScript, Go, Rust, Java), route to Tree-sitter
-        if ext != ".py" and HAS_TREE_SITTER:
-            ts_chunks = self._chunk_with_treesitter(content, file_path, ext)
-            if ts_chunks:
-                return ts_chunks
+        if ext != ".py":
+            if HAS_TREE_SITTER:
+                ts_chunks = self._chunk_with_treesitter(content, file_path, ext)
+                if ts_chunks:
+                    return ts_chunks
+            # Fallback for unmapped grammars, missing Tree-sitter wheels, or parse failures
+            return self._chunk_windowed(content, file_path, language=ext.lstrip(".") or "unknown")
 
         # Python files (.py) continue using our specialized Python AST parser
         try:
             tree = ast.parse(content, filename=file_path)
         except SyntaxError:
-            # Fallback if file has syntax errors: emit entire file as 1 chunk
-            return [
-                DocumentChunk.create(
-                    source_type=DocumentType.CODE,
-                    file_path=file_path,
-                    start_line=1,
-                    end_line=len(lines),
-                    content=content,
-                    metadata={"fallback": True},
-                )
-            ]
+            # Fallback if file has syntax errors: emit sliding window chunks
+            return self._chunk_windowed(content, file_path, language="python")
 
         # 1. Capture Module-Level Docstring if present
         module_docstring = ast.get_docstring(tree)
@@ -72,6 +66,10 @@ class ASTCodeChunker(BaseChunker):
                 chunks.extend(self._process_class(node, lines, file_path))
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 chunks.append(self._process_function(node, lines, file_path, parent_class=None))
+
+        # 3. If no classes or functions were found (e.g. flat script, module-level execution)
+        if not chunks and lines:
+            return self._chunk_windowed(content, file_path, language="python")
 
         return chunks
 
@@ -294,17 +292,69 @@ class ASTCodeChunker(BaseChunker):
                         )
                     )
 
-        # Fallback if no specific top-level symbols matched: chunk whole file
+        # Fallback if no specific top-level symbols matched: chunk using sliding window
         if not chunks and lines:
-            chunks.append(
+            return self._chunk_windowed(content, file_path, language=lang_name)
+
+        return chunks
+
+    def _chunk_windowed(
+        self,
+        content: str,
+        file_path: str,
+        language: str = "unknown",
+        window_size: int = 60,
+        overlap: int = 10,
+    ) -> List[DocumentChunk]:
+        """Universal sliding-window fallback for unmapped languages, syntax errors, and flat scripts.
+
+        Splits code into 60-line windows with a 10-line overlap. 60 lines (~200-350 tokens)
+        safely fits within embedding context limits (512 tokens), preventing silent truncation.
+        """
+        lines = content.splitlines()
+        if not lines:
+            return []
+
+        # If file is short enough, emit as a single chunk
+        if len(lines) <= window_size:
+            return [
                 DocumentChunk.create(
                     source_type=DocumentType.CODE,
                     file_path=file_path,
                     start_line=1,
                     end_line=len(lines),
                     content=content,
-                    metadata={"language": lang_name, "fallback": True},
+                    metadata={"fallback": True, "chunk_type": "sliding_window", "language": language},
                 )
-            )
+            ]
+
+        chunks: List[DocumentChunk] = []
+        stride = max(1, window_size - overlap)
+
+        for start_idx in range(0, len(lines), stride):
+            end_idx = min(len(lines), start_idx + window_size)
+            chunk_lines = lines[start_idx:end_idx]
+            chunk_content = "\n".join(chunk_lines)
+
+            if chunk_content.strip():
+                chunks.append(
+                    DocumentChunk.create(
+                        source_type=DocumentType.CODE,
+                        file_path=file_path,
+                        start_line=start_idx + 1,
+                        end_line=end_idx,
+                        content=chunk_content,
+                        metadata={
+                            "fallback": True,
+                            "chunk_type": "sliding_window",
+                            "language": language,
+                            "window_start": start_idx + 1,
+                            "window_end": end_idx,
+                        },
+                    )
+                )
+
+            if end_idx >= len(lines):
+                break
 
         return chunks
