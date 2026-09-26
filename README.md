@@ -115,8 +115,11 @@ engineering-knowledge-copilot/
    - **Modality Isolation**: Targets retrieval specifically to `CODE`, `DOCUMENTATION`, or `ISSUE_PR` collections, eliminating cross-modality noise.
    - **Deterministic Refusal**: Instantly rejects out-of-scope/adversarial queries with 0 latency and 0 hallucination.
 2. **Two-Pillar Repository Overview Architecture**:
-   - **Pillar 1 (Semantic Query Reformulation)**: Micro-LLM rewrites conversational/meta-queries (*"tell me about the repo"*, *"what is the big picture"*) into rich search terms for README/architecture retrieval with zero hardcoded string lists.
-   - **Pillar 2 (Permanent Repo Identity Card)**: Prepend repository name, primary domain, languages, and subsystems into every LLM generation prompt.
+   - **The Problem**: Open-ended queries (*"tell me about the repo"*, *"what is the big picture"*) cause keyword retrieval misses and LLM macro-amnesia in standard RAG.
+   - **Evaluated Solutions**: Rejected brittle regex pattern matching (fragile on unlisted synonyms) and premature full-agent loops (adds 5–15s of unnecessary multi-agent latency).
+   - **Selected Two-Pillar Solution**:
+     - **Pillar 1 (Semantic Query Reformulation)**: The Tier 2 Groq micro-LLM dynamically rewrites conversational/meta-queries into rich search terms for README/architecture retrieval with zero hardcoded string lists.
+     - **Pillar 2 (Permanent Repo Identity Card)**: Injects repository name, primary domain, languages, and subsystems directly into every LLM generation prompt, ensuring grounded macro-awareness.
 3. **Dynamic Repository Ingestion & Polyglot Chunking**:
    - Clone and index any public GitHub repository on-the-fly (`RepoCloner` + `RepoProfiler`).
    - AST chunking via Tree-sitter for Python, TypeScript/JavaScript, Go, Rust, Java, plus universal 60-line sliding window fallback with 10-line overlap.

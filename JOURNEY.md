@@ -379,9 +379,18 @@ When evaluated on standard RAG pipelines:
 1. **Lexical Mismatch**: Sparse search (BM25) searches for conversational words (*"tell"*, *"about"*, *"repo"*), completely missing `README.md` or architecture summaries.
 2. **Dense Vector Noise**: Embedding a colloquial query like *"tell me about it"* produces low cosine similarity against specific technical documentation sections, occasionally triggering out-of-scope distance gates.
 3. **Macro Context Amnesia**: Even if relevant chunks are retrieved, the generator LLM lacks top-down awareness of the repository's identity, primary domain, and subsystem layout, producing fragmented or hesitant answers.
-4. **Brittle Heuristic Trap**: Attempting to catch these queries via regex pattern lists (`if "tell me about" in query:`) is an ad-hoc band-aid that inevitably fails on unlisted variations (*"give me the 10,000 foot view"*, *"what is the main purpose"*).
 
-### 2. The Two-Pillar Industry Architecture
+### 2. Evaluated Solution Candidates & Tradeoff Analysis
+
+Before building, we analyzed three potential architectural paths:
+
+| Candidate | Strategy | Tradeoffs & Failure Modes | Decision |
+| :--- | :--- | :--- | :---: |
+| **Candidate A: Premature System D Full Agent Loop** | Trigger an autonomous multi-step LangGraph reflection loop to discover repo context. | Massive overkill for simple overview questions; adds 5–15 seconds of multi-agent latency, high token cost, and unnecessary state complexity before retrieval grounding is even solved. | ❌ Rejected |
+| **Candidate B: Hardcoded Heuristic Pattern Matching (`_is_overview_query`)** | Match queries against a static list of string patterns (`"tell me about"`, `"overview"`, etc.). | Highly brittle and fragile. Inevitably fails on unlisted synonyms, colloquial phrasing (*"give me the 10,000 foot view"*, *"what is this app"*), or multi-lingual input. | ❌ Rejected |
+| **Candidate C: Two-Pillar Industry Standard (Micro-LLM Rewriter + Repo Card Preamble)** | Micro-LLM dynamically rewrites query into rich retrieval terms; generator prepends a 50-token structured Repo Card on every turn. | Zero hardcoded string lists; adds only ~60ms micro-LLM latency; provides both macro architectural context and micro line-accurate citations. |  **Adopted** |
+
+### 3. The Two-Pillar Industry Architecture
 To resolve this permanently without hardcoded regex lists, we engineered a principled **two-pillar architecture**:
 
 ```mermaid
