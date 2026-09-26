@@ -83,6 +83,26 @@ class RoutedRAG:
 
         return combined_results[: self.top_k]
 
+    def _is_overview_query(self, query: str) -> bool:
+        """Detect broad meta-queries asking to summarize or describe the repo as a whole."""
+        q = query.lower()
+        patterns = [
+            "tell me about this repo", "tell me about the repo", "tell me about this project",
+            "what is this repo", "what is this project", "what is this repository",
+            "what does this repo", "what does this project", "what does this codebase",
+            "overview of this repo", "overview of the project", "overview",
+            "summarize this repo", "summarize this project", "summarize the repo",
+            "explain this project", "explain this repo", "about this repo", "about this project",
+            "tell me about it", "what is this all about"
+        ]
+        if any(p in q for p in patterns):
+            return True
+        words = q.split()
+        if len(words) <= 7 and ("repo" in words or "project" in words or "codebase" in words):
+            if any(w in words for w in ["what", "tell", "about", "describe", "explain", "summary"]):
+                return True
+        return False
+
     @traceable(name="System C (Routed Hybrid RAG)", run_type="chain")
     def answer(self, query: str) -> Dict[str, Any]:
         t_start = time.perf_counter()
@@ -109,26 +129,6 @@ class RoutedRAG:
                 "system_version": "System C (Cascading Intent Router)",
                 "routing_decision": decision.model_dump(),
             }
-
-    def _is_overview_query(self, query: str) -> bool:
-        """Detect broad meta-queries asking to summarize or describe the repo as a whole."""
-        q = query.lower()
-        patterns = [
-            "tell me about this repo", "tell me about the repo", "tell me about this project",
-            "what is this repo", "what is this project", "what is this repository",
-            "what does this repo", "what does this project", "what does this codebase",
-            "overview of this repo", "overview of the project", "overview",
-            "summarize this repo", "summarize this project", "summarize the repo",
-            "explain this project", "explain this repo", "about this repo", "about this project",
-            "tell me about it", "what is this all about"
-        ]
-        if any(p in q for p in patterns):
-            return True
-        words = q.split()
-        if len(words) <= 7 and ("repo" in words or "project" in words or "codebase" in words):
-            if any(w in words for w in ["what", "tell", "about", "describe", "explain", "summary"]):
-                return True
-        return False
 
         # Step 3: Modality-Filtered Retrieval
         t_ret = time.perf_counter()
