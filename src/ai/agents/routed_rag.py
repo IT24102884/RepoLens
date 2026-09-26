@@ -93,8 +93,9 @@ class RoutedRAG:
         # Step 2: Instant Refusal for Out-of-Scope Queries (0 latency, 0 hallucination)
         if decision.intent == QueryIntent.OUT_OF_SCOPE:
             total_ms = (time.perf_counter() - t_start) * 1000
+            repo_display = self.repo_profile.repo_name or "target"
             refusal_msg = (
-                f"I am an engineering assistant specialized exclusively in the encode/httpx repository. "
+                f"I am an engineering assistant specialized exclusively in the {repo_display} repository. "
                 f"The question '{query}' is outside the scope of this repository (no relevant documentation, "
                 f"source code, or issue tickets found). Therefore, I cannot provide an answer based on this codebase."
             )
@@ -131,8 +132,9 @@ class RoutedRAG:
         context_str = "\n".join(context_blocks)
 
         # Step 5: Grounded LLM Generation Prompt
+        repo_display = self.repo_profile.repo_name or "target"
         system_instruction = (
-            "You are an engineering assistant helping developers navigate the encode/httpx codebase.\n"
+            f"You are an engineering assistant helping developers navigate the {repo_display} codebase.\n"
             f"Query Intent: {decision.intent.value} (Route: {decision.route_source}).\n"
             "Answer the user's question using only the verified context provided below.\n"
             "Always cite exact file names and line numbers when referencing code or documentation.\n"
