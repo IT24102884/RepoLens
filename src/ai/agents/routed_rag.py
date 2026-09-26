@@ -83,26 +83,6 @@ class RoutedRAG:
 
         return combined_results[: self.top_k]
 
-    def _is_overview_query(self, query: str) -> bool:
-        """Detect broad meta-queries asking to summarize or describe the repo as a whole."""
-        q = query.lower()
-        patterns = [
-            "tell me about this repo", "tell me about the repo", "tell me about this project",
-            "what is this repo", "what is this project", "what is this repository",
-            "what does this repo", "what does this project", "what does this codebase",
-            "overview of this repo", "overview of the project", "overview",
-            "summarize this repo", "summarize this project", "summarize the repo",
-            "explain this project", "explain this repo", "about this repo", "about this project",
-            "tell me about it", "what is this all about"
-        ]
-        if any(p in q for p in patterns):
-            return True
-        words = q.split()
-        if len(words) <= 7 and ("repo" in words or "project" in words or "codebase" in words):
-            if any(w in words for w in ["what", "tell", "about", "describe", "explain", "summary"]):
-                return True
-        return False
-
     @traceable(name="System C (Routed Hybrid RAG)", run_type="chain")
     def answer(self, query: str) -> Dict[str, Any]:
         t_start = time.perf_counter()
@@ -132,23 +112,22 @@ class RoutedRAG:
 
         # Step 3: Modality-Filtered Retrieval
         t_ret = time.perf_counter()
-        if self._is_overview_query(query):
-            search_q = f"{self.repo_profile.repo_name} {self.repo_profile.description} overview architecture summary purpose README"
-            matches = self.retriever.search(
-                query=search_q,
-                top_k=self.top_k,
-                filter_type=DocumentType.DOCUMENTATION,
-            )
-            if not matches:
-                matches = self.retriever.search(query=search_q, top_k=self.top_k)
-        elif decision.intent == QueryIntent.MULTI_HOP and decision.sub_queries:
+        if decision.intent == QueryIntent.MULTI_HOP and decision.sub_queries:
             matches = self._retrieve_multihop(query, decision)
         else:
+            search_query = decision.optimized_search_query or query
             matches = self.retriever.search(
-                query=query,
+                query=search_query,
                 top_k=self.top_k,
                 filter_type=decision.target_source_type,
             )
+            # Graceful fallback: If strict modality filter returned no matches, search across all modalities
+            if not matches and decision.target_source_type is not None:
+                matches = self.retriever.search(
+                    query=search_query,
+                    top_k=self.top_k,
+                    filter_type=None,
+                )
         retrieval_ms = (time.perf_counter() - t_ret) * 1000
 
         # Step 4: Context Assembly
@@ -160,14 +139,31 @@ class RoutedRAG:
             )
         context_str = "\n".join(context_blocks)
 
-        # Step 5: Grounded LLM Generation Prompt
+        # Step 5: Grounded LLM Generation Prompt with Repo Card Preamble
         repo_display = self.repo_profile.repo_name or "target"
+        languages_str = ", ".join(self.repo_profile.primary_languages) or "general software"
+        subsystems_str = ", ".join(self.repo_profile.subsystems) or "core codebase"
+        description_str = self.repo_profile.description or "No repository overview available."
+
+        repo_card = (
+            "=== REPOSITORY IDENTITY CARD ===\n"
+            f"* Repository: {repo_display}\n"
+            f"* Domain & Overview: {description_str}\n"
+            f"* Primary Languages: {languages_str}\n"
+            f"* Key Subsystems: {subsystems_str}\n"
+            "================================"
+        )
+
         system_instruction = (
-            f"You are an engineering assistant helping developers navigate the {repo_display} codebase.\n"
+            f"You are an engineering assistant helping developers navigate the {repo_display} codebase.\n\n"
+            f"{repo_card}\n\n"
             f"Query Intent: {decision.intent.value} (Route: {decision.route_source}).\n"
-            "Answer the user's question using only the verified context provided below.\n"
-            "Always cite exact file names and line numbers when referencing code or documentation.\n"
-            "If the context does not contain the answer, explicitly state that you cannot find it.\n\n"
+            "Answer the user's question accurately.\n"
+            "- Use the Repository Identity Card above for broad architectural, domain, and purpose context.\n"
+            "- Use the verified context blocks below for specific technical implementation details, citations, and evidence.\n"
+            "- Always cite exact file names and line numbers when referencing code or documentation from the context.\n"
+            "- If the question asks for a general repository overview, high-level summary, or purpose, synthesize the Repository Identity Card and verified context into a comprehensive, well-structured explanation.\n"
+            "- If specific implementation details are requested but absent from the context, explicitly state that.\n\n"
             f"Context:\n{context_str}"
         )
 

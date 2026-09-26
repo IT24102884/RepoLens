@@ -269,24 +269,36 @@ def ingest_repo(req: IngestRepoRequest) -> IngestRepoResponse:
 @app.post("/api/repo/switch")
 def switch_repo(req: SwitchRepoRequest) -> Dict[str, Any]:
     global _active_repo_profile, _active_chunks_path, _active_collection_name
-    slug = req.repo_slug.strip().lower()
-    if slug in {"default", "encode_httpx", "encode/httpx"}:
+    slug = req.repo_slug.strip()
+    slug_norm = slug.lower().replace("-", "_").replace("/", "_")
+    if slug_norm in {"default", "encode_httpx"}:
         _active_repo_profile = DEFAULT_HTTPX_PROFILE
         _active_chunks_path = Path("data/processed/chunks.jsonl")
         _active_collection_name = "httpx_knowledge"
         reset_active_rag()
         return {"status": "success", "active_repo": "encode/httpx"}
 
-    target_dir = Path("data/repos") / slug
+    repos_base = Path("data/repos")
+    target_dir = None
+    if repos_base.exists():
+        for d in repos_base.iterdir():
+            if d.is_dir() and (d.name.lower().replace("-", "_") == slug_norm or d.name == slug):
+                target_dir = d
+                break
+
+    if not target_dir:
+        target_dir = repos_base / slug
+
     chunks_path = target_dir / "chunks.jsonl"
     if not target_dir.exists() or not chunks_path.exists():
         raise HTTPException(status_code=404, detail=f"Repository '{slug}' not found or not indexed.")
 
-    owner, repo_name = slug.split("_", 1) if "_" in slug else ("custom", slug)
+    actual_slug = target_dir.name
+    owner, repo_name = actual_slug.split("_", 1) if "_" in actual_slug else ("custom", actual_slug)
     profile = RepoProfiler.profile(target_dir, repo_name=f"{owner}/{repo_name}")
     _active_repo_profile = profile
     _active_chunks_path = chunks_path
-    _active_collection_name = f"repo_{slug}".replace("-", "_").replace(".", "_")
+    _active_collection_name = f"repo_{actual_slug}".lower().replace("-", "_").replace(".", "_")
     reset_active_rag()
     return {"status": "success", "active_repo": f"{owner}/{repo_name}"}
 

@@ -132,3 +132,26 @@ def test_llm_classification_fallback_on_error(router):
     assert decision.intent == QueryIntent.CODE_SYMBOL
     assert decision.confidence == 0.5
     assert decision.route_source == "llm_classifier_fallback"
+    assert decision.optimized_search_query is None
+
+
+def test_llm_classification_overview_query_reformulation(router):
+    mock_groq = MagicMock()
+    mock_choice = MagicMock()
+    mock_choice.message.content = (
+        '{\n'
+        '  "intent": "DOCS_CONCEPTUAL",\n'
+        '  "confidence": 0.98,\n'
+        '  "reasoning": "User asks for general repository overview and purpose.",\n'
+        '  "sub_queries": [],\n'
+        '  "optimized_search_query": "httpx HTTP client architecture overview README features"\n'
+        '}'
+    )
+    mock_groq.chat.completions.create.return_value.choices = [mock_choice]
+    router._groq_client = mock_groq
+
+    decision = router.classify_with_llm("tell me about the repo")
+    assert decision.intent == QueryIntent.DOCS_CONCEPTUAL
+    assert decision.confidence == 0.98
+    assert decision.optimized_search_query == "httpx HTTP client architecture overview README features"
+

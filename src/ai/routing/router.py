@@ -38,6 +38,10 @@ class RouteDecision(BaseModel):
     route_source: str = Field(description="'heuristic' or 'llm_classifier'")
     reasoning: str
     sub_queries: List[str] = Field(default_factory=list, description="Sub-queries for multi-hop expansion")
+    optimized_search_query: Optional[str] = Field(
+        default=None,
+        description="Rewritten search query for vector/BM25 retrieval when original query is conversational, meta, or broad",
+    )
 
 
 INTENT_TO_SOURCE_TYPE: Dict[QueryIntent, Optional[DocumentType]] = {
@@ -197,13 +201,16 @@ class IntentRouter:
             f"Primary Languages: {languages_str}\n"
             f"Subsystems: {subsystems_str}\n\n"
             "Classify the user question into exactly ONE intent:\n"
-            "- DOCS_CONCEPTUAL: High-level guides, documentation, architecture, conceptual questions.\n"
+            "- DOCS_CONCEPTUAL: High-level guides, documentation, architecture, conceptual questions, or general repository overviews.\n"
             "- CODE_SYMBOL: Specific code definitions, class signatures, function implementations, file locations, constants.\n"
             "- BUG_TICKET: Specific GitHub issues, PRs, bug numbers, regressions, ticket discussions.\n"
             "- MULTI_HOP: Cross-component data flows, tracing calls across multiple files, or issue-to-code diff bridges.\n"
             "- OUT_OF_SCOPE: Questions unrelated to this repository's domain (e.g. absent technologies, alien frameworks, non-software questions).\n\n"
+            "Query Optimization:\n"
+            "- If the query asks for an overview, summary, purpose, or high-level architecture of the repository (e.g., 'tell me about the repo', 'what does this do', 'give me the big picture', 'explain this project'), provide an 'optimized_search_query' combining key concepts, domain terms, and README/architecture keywords to retrieve the most relevant overview documentation.\n"
+            "- Otherwise, set 'optimized_search_query' to null.\n\n"
             "Respond ONLY with valid JSON in this exact structure:\n"
-            '{"intent": "DOCS_CONCEPTUAL|CODE_SYMBOL|BUG_TICKET|MULTI_HOP|OUT_OF_SCOPE", "confidence": 0.95, "reasoning": "brief explanation", "sub_queries": []}'
+            '{"intent": "DOCS_CONCEPTUAL|CODE_SYMBOL|BUG_TICKET|MULTI_HOP|OUT_OF_SCOPE", "confidence": 0.95, "reasoning": "brief explanation", "sub_queries": [], "optimized_search_query": null}'
         )
 
         try:
@@ -233,6 +240,8 @@ class IntentRouter:
             confidence = float(parsed.get("confidence", 0.85))
             reasoning = str(parsed.get("reasoning", "Classified via dynamic micro-LLM."))
             sub_queries = parsed.get("sub_queries", [])
+            opt_query = parsed.get("optimized_search_query")
+            optimized_search_query = opt_query.strip() if isinstance(opt_query, str) and opt_query.strip() else None
 
             return RouteDecision(
                 intent=intent,
@@ -241,6 +250,7 @@ class IntentRouter:
                 route_source="llm_classifier",
                 reasoning=reasoning,
                 sub_queries=sub_queries if isinstance(sub_queries, list) else [],
+                optimized_search_query=optimized_search_query,
             )
 
         except Exception as e:
@@ -250,6 +260,7 @@ class IntentRouter:
                 confidence=0.5,
                 route_source="llm_classifier_fallback",
                 reasoning=f"LLM classification fallback due to: {str(e)}",
+                optimized_search_query=None,
             )
 
     @traceable(name="Cascading Intent Router", run_type="parser")
