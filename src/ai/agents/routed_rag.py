@@ -110,9 +110,38 @@ class RoutedRAG:
                 "routing_decision": decision.model_dump(),
             }
 
+    def _is_overview_query(self, query: str) -> bool:
+        """Detect broad meta-queries asking to summarize or describe the repo as a whole."""
+        q = query.lower()
+        patterns = [
+            "tell me about this repo", "tell me about the repo", "tell me about this project",
+            "what is this repo", "what is this project", "what is this repository",
+            "what does this repo", "what does this project", "what does this codebase",
+            "overview of this repo", "overview of the project", "overview",
+            "summarize this repo", "summarize this project", "summarize the repo",
+            "explain this project", "explain this repo", "about this repo", "about this project",
+            "tell me about it", "what is this all about"
+        ]
+        if any(p in q for p in patterns):
+            return True
+        words = q.split()
+        if len(words) <= 7 and ("repo" in words or "project" in words or "codebase" in words):
+            if any(w in words for w in ["what", "tell", "about", "describe", "explain", "summary"]):
+                return True
+        return False
+
         # Step 3: Modality-Filtered Retrieval
         t_ret = time.perf_counter()
-        if decision.intent == QueryIntent.MULTI_HOP and decision.sub_queries:
+        if self._is_overview_query(query):
+            search_q = f"{self.repo_profile.repo_name} {self.repo_profile.description} overview architecture summary purpose README"
+            matches = self.retriever.search(
+                query=search_q,
+                top_k=self.top_k,
+                filter_type=DocumentType.DOCUMENTATION,
+            )
+            if not matches:
+                matches = self.retriever.search(query=search_q, top_k=self.top_k)
+        elif decision.intent == QueryIntent.MULTI_HOP and decision.sub_queries:
             matches = self._retrieve_multihop(query, decision)
         else:
             matches = self.retriever.search(

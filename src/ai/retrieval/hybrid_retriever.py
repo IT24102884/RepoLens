@@ -54,18 +54,18 @@ class HybridRetriever:
             filter_type=filter_type,
         )
 
-        # Mathematical Distance Gate: If top dense similarity is below noise floor, query is out-of-scope
-        if dense_results and threshold > 0.0:
-            top_sim = dense_results[0][1]
-            if top_sim < threshold:
-                return []
-
         # 2. Fetch sparse candidates
         sparse_results: List[Tuple[DocumentChunk, float]] = self.sparse_retriever.search(
             query=query,
             top_k=candidate_pool_size,
             filter_type=filter_type,
         )
+
+        # Mathematical Distance Gate: Only drop when dense similarity is below noise floor AND no sparse keyword matches
+        if threshold > 0.0:
+            top_sim = dense_results[0][1] if dense_results else 0.0
+            if top_sim < threshold and not sparse_results:
+                return []
 
         chunk_map: Dict[str, DocumentChunk] = {}
         rrf_scores: Dict[str, float] = {}
