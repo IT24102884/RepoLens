@@ -44,6 +44,7 @@ class HybridRAG:
                 {"role": "user", "content": query},
             ],
             temperature=0.1,
+            max_tokens=600,
         )
         return chat_completion.choices[0].message.content or ""
 

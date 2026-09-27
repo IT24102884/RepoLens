@@ -63,6 +63,7 @@ class BaselineRAG:
                 {"role": "user", "content": query},
             ],
             temperature=0.1,
+            max_tokens=600,
         )
         generation_ms = (time.perf_counter() - t_gen) * 1000
         total_ms = (time.perf_counter() - t_start) * 1000

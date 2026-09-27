@@ -101,7 +101,7 @@ def run_benchmark(system_choice: str = "d"):
         print(row)
 
         # Gentle pause between questions to respect free tier quotas
-        time.sleep(1.0)
+        time.sleep(3.0)
 
     # Calculate overall averages
     avg_recall = sum(r["recall"] for r in results) / len(results)

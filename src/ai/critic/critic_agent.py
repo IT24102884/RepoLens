@@ -132,17 +132,26 @@ class CriticAgent:
         )
 
         try:
-            completion = self.groq_client.chat.completions.create(
-                model=self.model_name,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ],
-                temperature=0.0,
-                max_tokens=1500,
-            )
+            completion = None
+            for attempt in range(3):
+                try:
+                    completion = self.groq_client.chat.completions.create(
+                        model=self.model_name,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_content},
+                        ],
+                        temperature=0.0,
+                        max_tokens=650,
+                    )
+                    break
+                except Exception as e:
+                    if ("rate_limit" in str(e).lower() or "429" in str(e)) and attempt < 2:
+                        time.sleep(3.0 * (attempt + 1))
+                    elif attempt == 2:
+                        raise
 
-            raw_text = completion.choices[0].message.content or "{}"
+            raw_text = completion.choices[0].message.content or "{}" if completion else "{}"
             json_str = raw_text.strip()
             if "```json" in json_str:
                 json_str = json_str.split("```json")[1].split("```")[0].strip()
