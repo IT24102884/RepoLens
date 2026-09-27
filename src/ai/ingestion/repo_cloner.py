@@ -15,6 +15,8 @@ IGNORED_DIRECTORIES = {
     ".idea", ".vscode", "coverage", ".next", ".nuxt", "public", "static",
 }
 
+MINIFIED_PATTERNS = {".min.", "-min.", ".bundle.", ".pack."}
+
 MAX_FILE_SIZE_BYTES = 250_000  # 250 KB cap to avoid minified bundles, lockfiles, data dumps
 MAX_FILES_BUDGET = 2_500      # 2,500 core files maximum to ensure fast sub-minute embedding
 
@@ -95,6 +97,10 @@ class RepoCloner:
             dirs[:] = [d for d in dirs if d not in IGNORED_DIRECTORIES and not d.startswith(".")]
 
             for file_name in files:
+                fn_lower = file_name.lower()
+                if any(pat in fn_lower for pat in MINIFIED_PATTERNS):
+                    continue
+
                 ext = Path(file_name).suffix.lower()
                 if ext not in SUPPORTED_EXTENSIONS:
                     continue
