@@ -1,4 +1,4 @@
-let currentSystem = "c";
+let currentSystem = "d";
 
 document.addEventListener("DOMContentLoaded", () => {
   loadRepoStats();
@@ -9,11 +9,20 @@ function switchSystem(sys) {
   const btnA = document.getElementById("btnSystemA");
   const btnB = document.getElementById("btnSystemB");
   const btnC = document.getElementById("btnSystemC");
+  const btnD = document.getElementById("btnSystemD");
   const badge = document.getElementById("headerSystemBadge");
 
-  [btnA, btnB, btnC].forEach((b) => b && b.classList.remove("active"));
+  [btnA, btnB, btnC, btnD].forEach((b) => b && b.classList.remove("active"));
 
-  if (sys === "c") {
+  if (sys === "d") {
+    if (btnD) btnD.classList.add("active");
+    if (badge) {
+      badge.textContent = "System D (Self-Correction Critic)";
+      badge.style.color = "#f59e0b";
+      badge.style.borderColor = "rgba(245, 158, 11, 0.4)";
+      badge.style.backgroundColor = "rgba(245, 158, 11, 0.1)";
+    }
+  } else if (sys === "c") {
     if (btnC) btnC.classList.add("active");
     if (badge) {
       badge.textContent = "System C (Cascading Intent Router)";
@@ -90,7 +99,9 @@ async function submitQuery(e) {
   const statusText = document.getElementById("statusText");
   if (statusIndicator) statusIndicator.style.display = "flex";
   if (statusText) {
-    if (currentSystem === "c") {
+    if (currentSystem === "d") {
+      statusText.textContent = "Running System D (Retrieval -> Generator -> Critic Self-Correction & Citation Snapping)...";
+    } else if (currentSystem === "c") {
       statusText.textContent = "Routing query via Cascading Router (Heuristics -> Micro-LLM)...";
     } else if (currentSystem === "b") {
       statusText.textContent = "Running Hybrid Search (Chroma Dense + BM25 Sparse with RRF k=60)...";
@@ -119,9 +130,11 @@ async function submitQuery(e) {
 
     const retEl = document.getElementById("lastRetrievalMs");
     const genEl = document.getElementById("lastGenerationMs");
+    const criticEl = document.getElementById("lastCriticMs");
     const totEl = document.getElementById("lastTotalMs");
     if (retEl) retEl.textContent = `${data.retrieval_latency_ms.toFixed(1)} ms`;
     if (genEl) genEl.textContent = `${data.generation_latency_ms.toFixed(1)} ms`;
+    if (criticEl) criticEl.textContent = data.critic_latency_ms != null ? `${data.critic_latency_ms.toFixed(1)} ms` : "0.0 ms";
     if (totEl) totEl.textContent = `${data.total_latency_ms.toFixed(1)} ms`;
 
     appendAIMessage(data);
@@ -209,13 +222,45 @@ function appendAIMessage(data) {
     `;
   }
 
+  const isSystemD = (data.system_version || "").includes("System D");
   const isSystemC = (data.system_version || "").includes("System C");
   const isSystemB = (data.system_version || "").includes("System B");
-  const badgeColor = isSystemC ? "#c084fc" : isSystemB ? "#4ade80" : "#60a5fa";
+  const badgeColor = isSystemD ? "#f59e0b" : isSystemC ? "#c084fc" : isSystemB ? "#4ade80" : "#60a5fa";
 
   const routingTag = data.intent
     ? `<span style="font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); font-weight: 600; margin-left: 6px;">🎯 ${data.intent} (${data.route_source || 'routed'})</span>`
     : "";
+
+  let criticBadge = "";
+  if (data.critic_status) {
+    const statusUpper = data.critic_status.toUpperCase();
+    const isPassed = statusUpper === "VERIFIED" || statusUpper === "PASS";
+    const isCorrected = statusUpper === "SELF-CORRECTED" || statusUpper === "CORRECTED";
+    const pillColor = isPassed ? "#10b981" : isCorrected ? "#f59e0b" : "#6b7280";
+    const pillBg = isPassed ? "rgba(16, 185, 129, 0.15)" : isCorrected ? "rgba(245, 158, 11, 0.15)" : "rgba(107, 114, 128, 0.15)";
+    const pillBorder = isPassed ? "rgba(16, 185, 129, 0.4)" : isCorrected ? "rgba(245, 158, 11, 0.4)" : "rgba(107, 114, 128, 0.3)";
+    const icon = isPassed ? "🛡️" : isCorrected ? "✨" : "ℹ️";
+    const faithStr = data.faithfulness_score != null ? ` (${Math.round(data.faithfulness_score * 100)}% faith)` : "";
+
+    criticBadge = `<span style="font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; background: ${pillBg}; color: ${pillColor}; border: 1px solid ${pillBorder}; font-weight: 600; margin-left: 6px;">${icon} ${statusUpper}${faithStr}</span>`;
+  }
+
+  let hallucinationsHtml = "";
+  if (data.hallucinations_detected && data.hallucinations_detected.length > 0) {
+    const items = data.hallucinations_detected.map(h => `<li style="margin-bottom: 4px;">${escapeHtml(h)}</li>`).join("");
+    hallucinationsHtml = `
+      <div class="hallucinations-callout" style="margin-top: 12px; padding: 10px 14px; border-radius: 6px; background-color: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); font-size: 0.8rem; color: #fbbf24;">
+        <div style="font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+          <span>⚠️ Critic Pruned Ungrounded Statements / Hallucinations:</span>
+        </div>
+        <ul style="margin: 0 0 0 18px; padding: 0; color: #fef3c7;">
+          ${items}
+        </ul>
+      </div>
+    `;
+  }
+
+  const criticTiming = data.critic_latency_ms != null ? `, Critic: ${data.critic_latency_ms.toFixed(0)}ms` : "";
 
   div.innerHTML = `
     <div class="ai-avatar">
@@ -229,10 +274,10 @@ function appendAIMessage(data) {
     <div class="ai-bubble">
       <div class="ai-meta">
         <div>
-          <strong style="color: #ffffff;">RepoLens Engine</strong> • <span style="color: ${badgeColor}; font-weight: 500;">${data.system_version}</span>${routingTag}
+          <strong style="color: #ffffff;">RepoLens Engine</strong> • <span style="color: ${badgeColor}; font-weight: 500;">${data.system_version}</span>${routingTag}${criticBadge}
         </div>
         <div class="ai-timing">
-          ⚡ ${(data.total_latency_ms / 1000).toFixed(2)}s (Ret: ${data.retrieval_latency_ms.toFixed(0)}ms, Gen: ${data.generation_latency_ms.toFixed(0)}ms)
+          ⚡ ${(data.total_latency_ms / 1000).toFixed(2)}s (Ret: ${data.retrieval_latency_ms.toFixed(0)}ms, Gen: ${data.generation_latency_ms.toFixed(0)}ms${criticTiming})
         </div>
       </div>
 
@@ -240,6 +285,7 @@ function appendAIMessage(data) {
         ${renderedAnswer}
       </div>
 
+      ${hallucinationsHtml}
       ${citationsHtml}
     </div>
   `;

@@ -5,7 +5,10 @@ from pydantic import BaseModel, Field
 class QueryRequest(BaseModel):
     query: str = Field(..., description="The user's technical question about the repository")
     top_k: int = Field(default=5, ge=1, le=20, description="Number of context chunks to retrieve")
-    system: str = Field(default="c", description="System architecture: 'a' for Baseline Dense RAG, 'b' for Hybrid BM25+RRF, 'c' for Routed Hybrid RAG")
+    system: str = Field(
+        default="d",
+        description="System architecture: 'a' for Baseline, 'b' for Hybrid, 'c' for Routed, 'd' for Critic & Citation Verifier",
+    )
 
 
 class CitationItem(BaseModel):
@@ -22,10 +25,15 @@ class QueryResponse(BaseModel):
     citations: List[CitationItem]
     retrieval_latency_ms: float
     generation_latency_ms: float
+    critic_latency_ms: Optional[float] = None
     total_latency_ms: float
-    system_version: str = "System C (Cascading Intent Router)"
+    system_version: str = "System D (Self-Correction Critic & Citation Verifier)"
     intent: Optional[str] = None
     route_source: Optional[str] = None
+    critic_status: Optional[str] = None
+    faithfulness_score: Optional[float] = None
+    hallucinations_detected: List[str] = Field(default_factory=list)
+    critique_summary: Optional[str] = None
 
 
 class RepoStatsResponse(BaseModel):

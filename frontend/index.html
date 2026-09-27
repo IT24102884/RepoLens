@@ -33,7 +33,7 @@
       <div>
         <div class="brand-row">
           <span class="brand-name">RepoLens</span>
-          <span class="badge-system" id="headerSystemBadge" style="color: #c084fc; border-color: rgba(192, 132, 252, 0.4); background-color: rgba(192, 132, 252, 0.1);">System C (Cascading Intent Router)</span>
+          <span class="badge-system" id="headerSystemBadge" style="color: #f59e0b; border-color: rgba(245, 158, 11, 0.4); background-color: rgba(245, 158, 11, 0.1);">System D (Self-Correction Critic)</span>
         </div>
         <p class="brand-sub">Multi-Agent Repository Knowledge & Citation Engine</p>
       </div>
@@ -75,7 +75,14 @@
       <div class="side-section">
         <h3 class="section-title">Architecture Ablation</h3>
         <div class="arch-toggle-container">
-          <button type="button" id="btnSystemC" class="arch-btn active" onclick="switchSystem('c')">
+          <button type="button" id="btnSystemD" class="arch-btn active" onclick="switchSystem('d')">
+            <div class="arch-btn-header">
+              <span class="arch-dot gold"></span>
+              <strong>System D: Self-Correction</strong>
+            </div>
+            <span class="arch-desc">Critic Agent + Verifier (90%+ Faith)</span>
+          </button>
+          <button type="button" id="btnSystemC" class="arch-btn" onclick="switchSystem('c')">
             <div class="arch-btn-header">
               <span class="arch-dot purple"></span>
               <strong>System C: Routed RAG</strong>
@@ -169,17 +176,21 @@
         <h3 class="section-title">Last Query Latency</h3>
         <div class="latency-grid">
           <div class="latency-box">
-            <div class="latency-label">Vector Search</div>
+            <div class="latency-label">Retrieval</div>
             <div class="latency-val" id="lastRetrievalMs">0.0 ms</div>
           </div>
           <div class="latency-box">
-            <div class="latency-label">Groq LPU</div>
+            <div class="latency-label">Generation</div>
             <div class="latency-val" id="lastGenerationMs">0.0 ms</div>
           </div>
-        </div>
-        <div class="total-latency-box">
-          <span>Total Latency:</span>
-          <span class="total-latency-val" id="lastTotalMs">0.0 ms</span>
+          <div class="latency-box">
+            <div class="latency-label">Critic Verifier</div>
+            <div class="latency-val" id="lastCriticMs">0.0 ms</div>
+          </div>
+          <div class="latency-box">
+            <div class="latency-label">Total Latency</div>
+            <div class="latency-val" id="lastTotalMs" style="color: #34d399;">0.0 ms</div>
+          </div>
         </div>
       </div>
     </aside>

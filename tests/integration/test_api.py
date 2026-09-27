@@ -23,6 +23,7 @@ def test_frontend_index_serving():
     response = client.get('/')
     assert response.status_code == 200
     assert 'RepoLens' in response.text
+    assert 'btnSystemD' in response.text
     assert len(response.text) > 1000
 
 def test_query_system_c_out_of_scope():
@@ -33,3 +34,15 @@ def test_query_system_c_out_of_scope():
     assert data['intent'] == 'OUT_OF_SCOPE'
     assert 'outside the scope' in data['answer']
     assert len(data['citations']) == 0
+
+
+def test_query_system_d_out_of_scope():
+    response = client.post('/api/query', json={'query': 'What is the weather in Tokyo?', 'system': 'd'})
+    assert response.status_code == 200
+    data = response.json()
+    assert 'System D' in data['system_version']
+    assert data['intent'] == 'OUT_OF_SCOPE'
+    assert 'outside the scope' in data['answer']
+    assert data['critic_status'] == 'VERIFIED'
+    assert len(data['citations']) == 0
+

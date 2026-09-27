@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from ai.agents.baseline_rag import BaselineRAG
+from ai.agents.critic_rag import CriticRAG
 from ai.agents.hybrid_rag import HybridRAG
 from ai.agents.routed_rag import RoutedRAG
 from ai.core.models import DocumentChunk, DocumentType
@@ -49,14 +50,16 @@ _active_collection_name: str = "httpx_knowledge"
 _baseline_rag: Optional[BaselineRAG] = None
 _hybrid_rag: Optional[HybridRAG] = None
 _routed_rag: Optional[RoutedRAG] = None
+_critic_rag: Optional[CriticRAG] = None
 
 
 def reset_active_rag() -> None:
     """Clear cached RAG singletons when switching or ingesting repositories."""
-    global _baseline_rag, _hybrid_rag, _routed_rag
+    global _baseline_rag, _hybrid_rag, _routed_rag, _critic_rag
     _baseline_rag = None
     _hybrid_rag = None
     _routed_rag = None
+    _critic_rag = None
 
 
 def get_baseline_rag() -> BaselineRAG:
@@ -106,6 +109,14 @@ def get_routed_rag() -> RoutedRAG:
             hybrid = HybridRetriever(dense_retriever=dense, sparse_retriever=sparse)
             _routed_rag = RoutedRAG(repo_profile=_active_repo_profile, retriever=hybrid)
     return _routed_rag
+
+
+def get_critic_rag() -> CriticRAG:
+    global _critic_rag
+    if _critic_rag is None:
+        routed = get_routed_rag()
+        _critic_rag = CriticRAG(repo_profile=_active_repo_profile, routed_rag=routed)
+    return _critic_rag
 
 
 @app.get("/health")
@@ -343,10 +354,14 @@ def handle_query(req: QueryRequest) -> QueryResponse:
             rag = get_hybrid_rag()
             rag_output = rag.answer(req.query.strip())
             version_str = "System B (Hybrid BM25 + Dense RRF)"
-        else:
+        elif sys == "c":
             rag = get_routed_rag()
             rag_output = rag.answer(req.query.strip())
             version_str = "System C (Cascading Intent Router)"
+        else:
+            rag = get_critic_rag()
+            rag_output = rag.answer(req.query.strip())
+            version_str = "System D (Self-Correction Critic & Citation Verifier)"
 
         routing_decision = rag_output.get("routing_decision") or {}
         intent_val = routing_decision.get("intent")
@@ -381,16 +396,23 @@ def handle_query(req: QueryRequest) -> QueryResponse:
                 )
             )
 
+        critic_lat = round(rag_output["critic_latency_ms"], 1) if "critic_latency_ms" in rag_output else None
+
         return QueryResponse(
             query=req.query,
             answer=rag_output.get("answer", ""),
             citations=citations,
             retrieval_latency_ms=round(rag_output.get("retrieval_latency_ms", 0.0), 1),
             generation_latency_ms=round(rag_output.get("generation_latency_ms", 0.0), 1),
+            critic_latency_ms=critic_lat,
             total_latency_ms=round(rag_output.get("total_latency_ms", 0.0), 1),
             system_version=version_str,
             intent=intent_str,
             route_source=route_source,
+            critic_status=rag_output.get("critic_status"),
+            faithfulness_score=rag_output.get("faithfulness_score"),
+            hallucinations_detected=rag_output.get("hallucinations_detected", []),
+            critique_summary=rag_output.get("critique_summary"),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Generation error: {str(e)}")
