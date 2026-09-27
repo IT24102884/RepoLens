@@ -108,4 +108,29 @@ This log records every significant failure encountered during benchmark runs, in
 - **Regression Test**: `tests/unit/test_citation_verifier.py`, `tests/unit/test_critic_agent.py`, `tests/unit/test_critic_rag.py`
 - **Status**: RESOLVED
 
+---
+
+### [FAIL-006] Dynamic Ingestion Crash: "Failed to fetch" at 55% from Tree-sitter C Memory Faults & Minified Bundles
+- **Date**: 2026-09-28
+- **Query ID**: INGEST-001 (Dynamic Ingestion of `https://github.com/IT24102884/product-is`)
+- **Question**: "Why does dynamic repository ingestion fail with 'Error: Failed to fetch' at 55% ('Stack Profiling')?"
+- **Expected Behavior**: Successfully clone, filter, chunk polyglot source code, generate local ChromaDB ONNX embeddings, and index BM25 tokens for arbitrary public GitHub repositories.
+- **Actual Behavior**: The frontend modal showed a red progress bar stuck at 55% with `Error: Failed to fetch`. The FastAPI backend terminated abruptly mid-request with exit code 1 (`Windows fatal exception: access violation`).
+- **Failure Category**: CHUNKING_FAILURE & INFRASTRUCTURE_CRASH
+- **Root Cause**: Two-fold:
+  1. **Tree-sitter C Runtime Heap/GC Fault**: In Python 3.13 on 64-bit Windows, `tree-sitter` (v0.26.0) native C extension (`_binding.cp313-win_amd64.pyd`) encounters a memory access violation (`0xC0000005`) during cyclic garbage collection (`gc.collect()`) after traversing large/deep AST trees or repeatedly instantiating `Parser`/`Language` objects. Because native C segfaults bypass Python's `try...except`, the OS immediately kills the worker process. The severed TCP connection manifests in the browser as `TypeError: Failed to fetch`.
+  2. **Unfiltered Committed Minified Bundles**: `product-is` contains committed vendor files (`jquery.min.js`, `bootstrap.min.js`, etc.) with 88,000+ characters per line and hundreds of chained expressions, exceeding C recursive descent stack limits.
+  3. **Uvicorn File Watcher Loop**: When running Uvicorn without `--reload-dir`, writing thousands of cloned repository files into `data/repos/` triggered `watchfiles` to kill and reload the server worker mid-flight.
+- **Hypothesis**:
+  1. Filter out all minified and packed vendor bundles (`*.min.*`, `*-min.*`, `*.bundle.*`, `*.pack.*`) in `RepoCloner`.
+  2. Cache `Parser` and `Language` instances as singletons in `_PARSER_CACHE` to avoid repeated C allocations.
+  3. In `ASTCodeChunker`, route non-Python files exceeding 15KB, 250 lines, or lines > 600 characters to the 100% crash-free pure-Python sliding-window chunker (`_chunk_windowed`).
+  4. Clamp all line indices to `[1, len(lines)]` to prevent corrupted point coordinates from triggering unbounded slicing.
+- **Fix**: Applied filtering in `src/ai/ingestion/repo_cloner.py` and guarded Tree-sitter routing with module-level caching and line clamping in `src/ai/ingestion/code_chunker.py`.
+- **Before Metric**: Ingestion crashed at file 29 with exit code 1; browser threw `Failed to fetch` at 55%; 0 chunks indexed.
+- **After Metric**: Ingestion completed in 3.0s; all 59 core source files cleanly parsed into 286 chunks; 100% indexed in ChromaDB and BM25; 63/63 automated tests passing.
+- **Regression Test**: `tests/integration/test_repo_ingest_api.py::test_ingest_repo_success`
+- **Status**: RESOLVED
+
+
 
