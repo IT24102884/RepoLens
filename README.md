@@ -102,31 +102,35 @@ engineering-knowledge-copilot/
 | **System A (Naive Dense RAG)** | 87.5% | 72.9% | 68.8% | 100.0% | 75.0% | 5.29s (P50 1.3s) | $0.00 | ✅ Baseline |
 | **System B (BM25 Hybrid + RRF)** | 93.8% | 85.4% | 62.5% | 100.0% | 0.0% | 1.10s (178ms ret) | $0.00 | ✅ Completed |
 | **System C (+ Cascading Intent Router)** | **100.0%** | **85.4%** | 43.8% | **100.0%** | **100.0% (0.00s fast)** | **1.20s** | **$0.00** | ✅ Completed |
-| **System D (+ Critic & Hallucination Guard)** | *Planned* | *Planned* | *Target: >90%* | *100.0%* | *100.0%* | *TBD* | *TBD* | 🚧 Next |
-| **System E (+ Bounded Retry Loop)** | *Planned* | *Planned* | *Planned* | *100.0%* | *100.0%* | *TBD* | *TBD* | 📋 Upcoming |
+| **System D (+ Self-Correction Critic & Verifier)** | **100.0%** | **85.4%** | **85.0%** | **87.5% - 100.0%** | **100.0% (0.69s fast)** | **10.7s (2.8s median)** | **$0.00** | ✅ Completed |
+| **System E (+ Bounded Retry Loop)** | *Planned* | *Planned* | *Target: >95%* | *100.0%* | *100.0%* | *TBD* | *TBD* | 🚧 Next |
 
 ---
 
-## 7. Key Features in Current System (v0.3.0)
+## 7. Key Features in Current System (v0.4.0)
 
-1. **Cascading Intent Router & Modality Filtering (System C)**:
+1. **Self-Correction Critic Agent & Deterministic Citation Verifier (System D)**:
+   - **Deterministic Coordinate Snapping**: Checks cited file paths and line numbers against retrieved chunks, automatically rewriting drifted line coordinates back to exact chunk bounds without LLM hallucination.
+   - **Semantic Entailment Critic**: Groq micro-LLM analyzes draft answer sentence-by-sentence, detecting ungrounded assertions and autonomously rewriting the answer to be 100% faithful to the context.
+   - **Zero-Latency Refusal Bypass**: Adversarial and out-of-scope queries bypass verification entirely, returning immediate refusal in < 0.70s.
+2. **Cascading Intent Router & Modality Filtering (System C)**:
    - **Tier 1 (0ms)**: Fast-path regex matching universal non-software queries, exact code syntax, and GitHub issue tags (`#1240`).
    - **Tier 2 (~60ms)**: Dynamic Groq micro-LLM classifier (`qwen/qwen3.8-27b`) parameterized by repository profile.
    - **Modality Isolation**: Targets retrieval specifically to `CODE`, `DOCUMENTATION`, or `ISSUE_PR` collections, eliminating cross-modality noise.
    - **Deterministic Refusal**: Instantly rejects out-of-scope/adversarial queries with 0 latency and 0 hallucination.
-2. **Two-Pillar Repository Overview Architecture**:
+3. **Two-Pillar Repository Overview Architecture**:
    - **The Problem**: Open-ended queries (*"tell me about the repo"*, *"what is the big picture"*) cause keyword retrieval misses and LLM macro-amnesia in standard RAG.
    - **Evaluated Solutions**: Rejected brittle regex pattern matching (fragile on unlisted synonyms) and premature full-agent loops (adds 5–15s of unnecessary multi-agent latency).
    - **Selected Two-Pillar Solution**:
      - **Pillar 1 (Semantic Query Reformulation)**: The Tier 2 Groq micro-LLM dynamically rewrites conversational/meta-queries into rich search terms for README/architecture retrieval with zero hardcoded string lists.
      - **Pillar 2 (Permanent Repo Identity Card)**: Injects repository name, primary domain, languages, and subsystems directly into every LLM generation prompt, ensuring grounded macro-awareness.
-3. **Dynamic Repository Ingestion & Polyglot Chunking**:
+4. **Dynamic Repository Ingestion & Polyglot Chunking**:
    - Clone and index any public GitHub repository on-the-fly (`RepoCloner` + `RepoProfiler`).
    - AST chunking via Tree-sitter for Python, TypeScript/JavaScript, Go, Rust, Java, plus universal 60-line sliding window fallback with 10-line overlap.
-4. **Mathematical Distance Gating**:
+5. **Mathematical Distance Gating**:
    - Enforces a cosine similarity noise floor ($\tau = 0.28$) only when BM25 sparse keyword matches are 0, rejecting true noise without dropping rare lexical tokens.
-5. **Interactive Citation UI**:
-   - Dark-mode web interface with live latency telemetry (retrieval vs. generation), interactive citation drawers, repository switcher, and live ingestion modal.
+6. **Interactive Citation UI**:
+   - Dark-mode web interface with live latency telemetry (retrieval, generation, critic), interactive citation drawers, verification badges (`🛡️ VERIFIED` / `✨ SELF-CORRECTED`), pruned hallucination callouts, repository switcher, and live ingestion modal.
 
 ---
 
