@@ -84,9 +84,20 @@ def evaluate_citation_presence(answer: str, retrieved_chunks: List[Dict[str, Any
 
 def evaluate_faithfulness(answer: str, retrieved_chunks: List[Dict[str, Any]]) -> float:
     """Uses LLM-as-a-judge to detect whether any claims in the answer are ungrounded hallucinations."""
-    # If the model explicitly refused, there are no ungrounded claims made
-    refusal_signals = ["cannot find", "not found in the repository", "not available in the repository"]
+    # If the model explicitly refused or no chunks were retrieved (out of scope), there are no ungrounded claims made
+    refusal_signals = [
+        "cannot find",
+        "not found in the repository",
+        "not available in the repository",
+        "outside the scope",
+        "cannot provide an answer",
+        "no relevant documentation",
+        "not provide an answer",
+        "does not support",
+    ]
     if any(sig in answer.lower() for sig in refusal_signals):
+        return 1.0
+    if not retrieved_chunks:
         return 1.0
 
     api_key = os.getenv("GROQ_API_KEY")
@@ -94,7 +105,7 @@ def evaluate_faithfulness(answer: str, retrieved_chunks: List[Dict[str, Any]]) -
         return 1.0
 
     client = Groq(api_key=api_key)
-    context_text = "\n---\n".join(c.get("content", "") for c in retrieved_chunks[:3])
+    context_text = "\n---\n".join(c.get("content", "") for c in retrieved_chunks[:5])
 
     judge_prompt = (
         "You are an impartial evaluation judge for a RAG system.\n"

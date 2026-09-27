@@ -5,6 +5,7 @@ import time
 from ai.agents.baseline_rag import BaselineRAG
 from ai.agents.hybrid_rag import HybridRAG
 from ai.agents.routed_rag import RoutedRAG
+from ai.agents.critic_rag import CriticRAG
 from ai.evaluation.metrics import (
     evaluate_citation_presence,
     evaluate_faithfulness,
@@ -14,7 +15,7 @@ from ai.evaluation.metrics import (
 )
 
 
-def run_benchmark(system_choice: str = "c"):
+def run_benchmark(system_choice: str = "d"):
     benchmark_file = Path("eval/data/benchmark.jsonl")
     reports_dir = Path("eval/reports")
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -39,10 +40,14 @@ def run_benchmark(system_choice: str = "c"):
         rag = HybridRAG()
         sys_name = "SYSTEM B (HYBRID BM25 + DENSE RRF)"
         report_file = "system_b_hybrid.json"
-    else:
+    elif sys_key == "c":
         rag = RoutedRAG()
         sys_name = "SYSTEM C (CASCADING INTENT ROUTER)"
         report_file = "system_c_routed.json"
+    else:
+        rag = CriticRAG()
+        sys_name = "SYSTEM D (SELF-CORRECTION CRITIC & CITATION VERIFIER)"
+        report_file = "system_d_critic.json"
 
     print("\n" + "=" * 80)
     print(f"       REPOLENS EVALUATION HARNESS — {sys_name}")
@@ -87,6 +92,9 @@ def run_benchmark(system_choice: str = "c"):
             "answer": output["answer"],
             "retrieved_chunks": output.get("retrieved_chunks", []),
             "routing_decision": output.get("routing_decision"),
+            "critic_status": output.get("critic_status"),
+            "critic_faithfulness": output.get("faithfulness_score"),
+            "hallucinations_detected": output.get("hallucinations_detected", []),
         })
 
         row = f"{query_id:<6} | {category:<16} | {recall*100:>5.1f}% | {faithfulness*100:>7.1f}% | {refusal*100:>6.1f}% | {citation*100:>4.0f}% | {latency_sec:>6.2f}s"
@@ -142,9 +150,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="RepoLens Benchmark Evaluation Harness")
     parser.add_argument(
         "--system",
-        choices=["a", "b", "c"],
-        default="c",
-        help="System architecture to evaluate: 'a' (Baseline), 'b' (Hybrid), 'c' (Routed)",
+        choices=["a", "b", "c", "d"],
+        default="d",
+        help="System architecture to evaluate: 'a' (Baseline), 'b' (Hybrid), 'c' (Routed), 'd' (Critic & Citation Verifier)",
     )
     args = parser.parse_args()
     run_benchmark(args.system)
