@@ -91,3 +91,21 @@ This log records every significant failure encountered during benchmark runs, in
 - **Regression Test**: `tests/unit/test_bm25_retriever.py::test_tokenize_code_handles_identifiers_and_issues`
 - **Status**: RESOLVED
 
+---
+
+### [FAIL-005] The Faithfulness Gap: Phantom Line Coordinates & Ungrounded Extrapolations in Raw LLM Synthesis
+- **Date**: 2026-09-27
+- **Query ID**: Q-002, Q-004, Q-006, Q-007
+- **Question**: Cross-category engineering queries requiring precise line numbers and symbol bounds.
+- **Expected Behavior**: Generator citations point to verbatim line numbers existing in the repository chunks, making zero unsubstantiated architectural claims or negative assertions.
+- **Actual Behavior**: In System C, Retrieval Recall reached 100.0%, but LLM Judge Faithfulness lingered at 43.8%. Raw LLMs drifted line numbers (e.g., citing L143 when the chunk was L86-L155), hallucinated negative claims ("httpx does not have a separate HTTPStatus class"), and fabricated attribute locations.
+- **Failure Category**: CITATION_FAILURE & HALLUCINATION
+- **Root Cause**: Generative LLMs are non-deterministic sequence predictors trained on semantic similarity rather than formal coordinate geometry. When citing code, they extrapolate plausible line offsets and assume unobserved APIs exist.
+- **Hypothesis**: A two-stage post-generation gate comprising: (1) A deterministic citation verifier that validates citation format and snaps drifted line bounds to verbatim chunk coordinates, and (2) A semantic entailment Critic Agent (micro-LLM) that extracts propositions, verifies entailment against source snippets, and autonomously rewrites or prunes ungrounded claims.
+- **Fix**: Implemented `CitationVerifier` (`src/ai/critic/citation_verifier.py`), `CriticAgent` (`src/ai/critic/critic_agent.py`), and `CriticRAG` (`src/ai/agents/critic_rag.py`) in System D.
+- **Before Metric**: Faithfulness (Judge): 43.8%, Citation Line Drift: Frequent.
+- **After Metric**: Faithfulness (Judge): **85.0%** (nearly doubled), Citation Presence: **87.5% - 100.0%**, Zero phantom line coordinates delivered to user.
+- **Regression Test**: `tests/unit/test_citation_verifier.py`, `tests/unit/test_critic_agent.py`, `tests/unit/test_critic_rag.py`
+- **Status**: RESOLVED
+
+

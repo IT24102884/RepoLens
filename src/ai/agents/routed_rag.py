@@ -52,15 +52,26 @@ class RoutedRAG:
 
     @traceable(name="Groq LPU Generation", run_type="llm")
     def _call_llm(self, system_instruction: str, query: str) -> str:
-        chat_completion = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": query},
-            ],
-            temperature=0.1,
-        )
-        return chat_completion.choices[0].message.content or ""
+        for attempt in range(3):
+            try:
+                chat_completion = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
+                        {"role": "system", "content": system_instruction},
+                        {"role": "user", "content": query},
+                    ],
+                    temperature=0.1,
+                    max_tokens=600,
+                )
+                return chat_completion.choices[0].message.content or ""
+            except Exception as e:
+                if ("rate_limit" in str(e).lower() or "429" in str(e)) and attempt < 2:
+                    time.sleep(3.0 * (attempt + 1))
+                elif attempt == 2:
+                    raise
+                else:
+                    time.sleep(1.0)
+        return ""
 
     def _retrieve_multihop(self, query: str, decision: RouteDecision) -> List[Tuple[DocumentChunk, float]]:
         """Retrieve candidates across multiple sub-queries for multi-hop questions."""
