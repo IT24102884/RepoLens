@@ -11,8 +11,6 @@ try:
 except ImportError:
     HAS_TREE_SITTER = False
 
-_PARSER_CACHE: Dict[str, Any] = {}
-
 
 class ASTCodeChunker(BaseChunker):
     """Universal AST-aware chunker supporting Python, TypeScript, JavaScript, Go, Rust, and Java."""
@@ -32,11 +30,6 @@ class ASTCodeChunker(BaseChunker):
 
         # If it's a non-Python code file (TypeScript, JavaScript, Go, Rust, Java), route to Tree-sitter
         if ext != ".py":
-            # Guard: large polyglot files (>15KB / >250 lines) or files with long minified lines (>600 chars)
-            # are safely routed to sliding window chunking to prevent native C parser stack overflows on Windows.
-            if len(content) > 15_000 or len(lines) > 250 or any(len(l) > 600 for l in lines):
-                return self._chunk_windowed(content, file_path, language=ext.lstrip(".") or "unknown")
-
             if HAS_TREE_SITTER:
                 ts_chunks = self._chunk_with_treesitter(content, file_path, ext)
                 if ts_chunks:
@@ -196,39 +189,36 @@ class ASTCodeChunker(BaseChunker):
         )
 
     def _get_parser_for_extension(self, ext: str) -> Optional[tuple]:
-        """Dynamically load and cache the language parser needed for this file."""
-        if ext in _PARSER_CACHE:
-            return _PARSER_CACHE[ext]
-
+        """Dynamically load only the language parser needed for this file."""
         try:
             if ext == ".py":
                 import tree_sitter_python as tspython
-                _PARSER_CACHE[ext] = ("python", Parser(Language(tspython.language())))
+                return "python", Parser(Language(tspython.language()))
 
             elif ext in {".ts", ".tsx"}:
                 import tree_sitter_typescript as tstypescript
                 lang_fn = tstypescript.language_tsx if ext == ".tsx" else tstypescript.language_typescript
-                _PARSER_CACHE[ext] = ("typescript", Parser(Language(lang_fn())))
+                return "typescript", Parser(Language(lang_fn()))
 
             elif ext in {".js", ".jsx"}:
                 import tree_sitter_javascript as tsjavascript
-                _PARSER_CACHE[ext] = ("javascript", Parser(Language(tsjavascript.language())))
+                return "javascript", Parser(Language(tsjavascript.language()))
 
             elif ext == ".go":
                 import tree_sitter_go as tsgo
-                _PARSER_CACHE[ext] = ("go", Parser(Language(tsgo.language())))
+                return "go", Parser(Language(tsgo.language()))
 
             elif ext == ".rs":
                 import tree_sitter_rust as tsrust
-                _PARSER_CACHE[ext] = ("rust", Parser(Language(tsrust.language())))
+                return "rust", Parser(Language(tsrust.language()))
 
             elif ext == ".java":
                 import tree_sitter_java as tsjava
-                _PARSER_CACHE[ext] = ("java", Parser(Language(tsjava.language())))
+                return "java", Parser(Language(tsjava.language()))
 
-            return _PARSER_CACHE.get(ext)
         except Exception:
             return None
+        return None
 
     def _chunk_with_treesitter(
         self, content: str, file_path: str, ext: str
@@ -239,9 +229,8 @@ class ASTCodeChunker(BaseChunker):
             return []
 
         lang_name, parser = parser_info
-        source_bytes = content.encode("utf-8")
         try:
-            tree = parser.parse(source_bytes)
+            tree = parser.parse(content.encode("utf-8"))
         except Exception:
             return []
 
@@ -263,51 +252,45 @@ class ASTCodeChunker(BaseChunker):
             "class_declaration", "interface_declaration", "method_declaration",
         }
 
-        try:
-            for child in tree.root_node.children:
-                node_to_check = child
+        for child in tree.root_node.children:
+            node_to_check = child
 
-                # If wrapped in an export statement (e.g. `export function ...` in TS/JS), unpack it
-                if child.type == "export_statement" and child.children:
-                    for c in child.children:
-                        if c.type in target_types:
-                            node_to_check = c
+            # If wrapped in an export statement (e.g. `export function ...` in TS/JS), unpack it
+            if child.type == "export_statement" and child.children:
+                for c in child.children:
+                    if c.type in target_types:
+                        node_to_check = c
+                        break
+
+            if node_to_check.type in target_types:
+                s_line = node_to_check.start_point.row + 1
+                e_line = node_to_check.end_point.row + 1
+
+                # Extract identifier name using Tree-sitter's standard 'name' field
+                name_node = node_to_check.child_by_field_name("name")
+                if not name_node and node_to_check.children:
+                    for ch in node_to_check.children:
+                        if ch.child_by_field_name("name"):
+                            name_node = ch.child_by_field_name("name")
                             break
+                symbol_name = name_node.text.decode("utf-8") if name_node else "anonymous"
 
-                if node_to_check.type in target_types:
-                    raw_s = node_to_check.start_point.row + 1
-                    raw_e = node_to_check.end_point.row + 1
-                    # Bounds check against corrupt/negative line coordinates
-                    s_line = max(1, min(raw_s, len(lines)))
-                    e_line = max(s_line, min(raw_e, len(lines)))
-
-                    # Extract identifier name using Tree-sitter's standard 'name' field
-                    name_node = node_to_check.child_by_field_name("name")
-                    if not name_node and node_to_check.children:
-                        for ch in node_to_check.children:
-                            if ch.child_by_field_name("name"):
-                                name_node = ch.child_by_field_name("name")
-                                break
-                    symbol_name = name_node.text.decode("utf-8", errors="ignore") if name_node else "anonymous"
-
-                    chunk_content = "\n".join(lines[s_line - 1 : e_line])
-                    if chunk_content.strip():
-                        chunks.append(
-                            DocumentChunk.create(
-                                source_type=DocumentType.CODE,
-                                file_path=file_path,
-                                start_line=s_line,
-                                end_line=e_line,
-                                content=chunk_content,
-                                metadata={
-                                    "language": lang_name,
-                                    "symbol_name": symbol_name,
-                                    "symbol_type": node_to_check.type,
-                                },
-                            )
+                chunk_content = "\n".join(lines[s_line - 1 : e_line])
+                if chunk_content.strip():
+                    chunks.append(
+                        DocumentChunk.create(
+                            source_type=DocumentType.CODE,
+                            file_path=file_path,
+                            start_line=s_line,
+                            end_line=e_line,
+                            content=chunk_content,
+                            metadata={
+                                "language": lang_name,
+                                "symbol_name": symbol_name,
+                                "symbol_type": node_to_check.type,
+                            },
                         )
-        except Exception:
-            return self._chunk_windowed(content, file_path, language=lang_name)
+                    )
 
         # Fallback if no specific top-level symbols matched: chunk using sliding window
         if not chunks and lines:

@@ -15,8 +15,6 @@ IGNORED_DIRECTORIES = {
     ".idea", ".vscode", "coverage", ".next", ".nuxt", "public", "static",
 }
 
-MINIFIED_PATTERNS = {".min.", "-min.", ".bundle.", ".pack."}
-
 MAX_FILE_SIZE_BYTES = 250_000  # 250 KB cap to avoid minified bundles, lockfiles, data dumps
 MAX_FILES_BUDGET = 2_500      # 2,500 core files maximum to ensure fast sub-minute embedding
 
@@ -37,25 +35,18 @@ class RepoCloner:
 
     @classmethod
     def clone(cls, repo_url: str, base_dir: Path = Path("data/repos")) -> Tuple[Path, str]:
-        """Execute shallow clone (--depth 1) into managed directory with Windows long-path resilience."""
+        """Execute shallow clone (--depth 1) into managed directory."""
         owner, repo_name = cls.parse_repo_slug(repo_url)
         slug = f"{owner}_{repo_name}"
         repo_dir = base_dir / slug
 
         if repo_dir.exists():
-            # If valid repository with files, reuse it
-            if (repo_dir / ".git").exists() and any(f for f in repo_dir.iterdir() if f.name != ".git"):
-                return repo_dir, f"{owner}/{repo_name}"
-            # Stale or broken empty directory from a prior failed attempt -> remove it cleanly
-            shutil.rmtree(repo_dir, ignore_errors=True)
+            return repo_dir, f"{owner}/{repo_name}"
 
         repo_dir.parent.mkdir(parents=True, exist_ok=True)
 
         cmd = [
-            "git",
-            "-c", "core.longpaths=true",
-            "-c", "core.protectNTFS=false",
-            "clone",
+            "git", "clone",
             "--depth", "1",
             "--single-branch",
             repo_url,
@@ -63,27 +54,8 @@ class RepoCloner:
         ]
 
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-        output_text = (result.stderr.strip() + " " + result.stdout.strip()).strip()
-
         if result.returncode != 0:
-            # If clone object transfer succeeded but checkout failed on specific files:
-            if "clone succeeded, but checkout failed" in output_text.lower() and (repo_dir / ".git").exists():
-                # Attempt forced checkout of all files that can be written to NTFS
-                checkout_cmd = [
-                    "git",
-                    "-c", "core.longpaths=true",
-                    "-c", "core.protectNTFS=false",
-                    "-C", str(repo_dir),
-                    "checkout", "-f", "HEAD",
-                ]
-                subprocess.run(checkout_cmd, capture_output=True, text=True, check=False)
-
-            # Check if any valid source files exist to proceed with
-            source_files = cls.collect_source_files(repo_dir) if repo_dir.exists() else []
-            if not source_files:
-                # Genuinely unusable or failed clone -> clean up to prevent corrupted state
-                shutil.rmtree(repo_dir, ignore_errors=True)
-                raise RuntimeError(f"Git clone failed: {output_text or 'No source files checked out'}")
+            raise RuntimeError(f"Git clone failed: {result.stderr.strip() or result.stdout.strip()}")
 
         return repo_dir, f"{owner}/{repo_name}"
 
@@ -97,10 +69,6 @@ class RepoCloner:
             dirs[:] = [d for d in dirs if d not in IGNORED_DIRECTORIES and not d.startswith(".")]
 
             for file_name in files:
-                fn_lower = file_name.lower()
-                if any(pat in fn_lower for pat in MINIFIED_PATTERNS):
-                    continue
-
                 ext = Path(file_name).suffix.lower()
                 if ext not in SUPPORTED_EXTENSIONS:
                     continue

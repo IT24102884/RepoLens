@@ -157,8 +157,8 @@ echo GROQ_API_KEY="your_groq_api_key_here" > .env
 # 4. Run the test suite (50 automated tests)
 uv run pytest
 
-# 5. Launch the FastAPI server & frontend (restricted to src and frontend so data/ writes do not restart the server)
-uv run uvicorn backend.api.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir src --reload-dir frontend
+# 5. Launch the FastAPI server & frontend
+uv run uvicorn backend.api.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 Visit **`http://127.0.0.1:8000`** in your browser to start querying repositories or ingest new ones!
